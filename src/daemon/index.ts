@@ -38,9 +38,9 @@ function onLine<T>(task: () => Promise<T>): Promise<T> {
   return next
 }
 
-async function say(call: Call, text: string): Promise<void> {
+async function say(call: Call, text: string, session?: Session): Promise<void> {
   if (call.closed || call.skipping) return
-  await call.play(await synthesize(text))
+  await call.play(await synthesize(text, session))
 }
 
 // The beep always plays, even right after a keypress cut the speech short.
@@ -122,7 +122,7 @@ async function handleInbound(call: Call, ext: number): Promise<void> {
   if (session.voicemail.length) {
     while (session.voicemail.length && !call.closed && !call.skipping) {
       const message = session.voicemail.shift()!
-      await say(call, message.text)
+      await say(call, message.text, session)
       if (call.closed) session.voicemail.unshift(message)
     }
     voicemailChanged()
@@ -218,7 +218,7 @@ function ring(session: Session, text: string): Promise<void> {
   return callPhone(
     session,
     async call => {
-      await say(call, text)
+      await say(call, text, session)
       const replied = await captureAndDeliver(call, session, REPLY_WAIT_MS)
       if (!replied) await say(call, 'Okay, bye.')
     },

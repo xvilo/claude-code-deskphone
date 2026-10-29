@@ -11,14 +11,44 @@ const VOICE_LANGUAGE = process.env.DESKPHONE_VOICE_LANGUAGE ?? 'en'
 
 export type Voice = { name: string; locale: string }
 
-const DETECT_LANGUAGE = 'ObjC.import("NaturalLanguage"); function run(argv) { return ObjC.unwrap($.NLLanguageRecognizer.dominantLanguageForString(argv[0])) }'
+const DETECT_LANGUAGE = 'ObjC.import("NaturalLanguage"); function run(argv) { const r = $.NLLanguageRecognizer.alloc.init; r.processString(argv[0]); return JSON.stringify(ObjC.deepUnwrap(r.languageHypothesesWithMaximum(5))) }'
 
-async function detectLanguage(text: string): Promise<string> {
-  try {
-    return String(await run('osascript', ['-l', 'JavaScript', '-e', DETECT_LANGUAGE, text])).trim().split('-')[0]
-  } catch {
-    return VOICE_LANGUAGE
+// Below this, short replies like "Ja." or "OK, done." often score highest in
+// an unrelated language, so only languages already in play are considered.
+const CONFIDENT = 0.8
+
+export type LanguageGuess = { language: string; confident: boolean }
+
+export function chooseLanguage(hypotheses: Record<string, number>, preferred: string[]): LanguageGuess {
+  const scores = new Map<string, number>()
+  for (const [tag, p] of Object.entries(hypotheses)) {
+    const lang = tag.split('-')[0]
+    scores.set(lang, Math.max(scores.get(lang) ?? 0, p))
   }
+  const [top] = [...scores].sort((a, b) => b[1] - a[1])
+  if (top && top[1] >= CONFIDENT) return { language: top[0], confident: true }
+  const best = preferred.reduce((a, b) => ((scores.get(b) ?? 0) > (scores.get(a) ?? 0) ? b : a))
+  return { language: best, confident: false }
+}
+
+export function preferredLanguages(hint: string | null | undefined, env: NodeJS.ProcessEnv): string[] {
+  const configured = Object.keys(env).flatMap(key => key.match(/^DESKPHONE_VOICE_([A-Z]{2,3})$/)?.[1].toLowerCase() ?? [])
+  const whisper = env.DESKPHONE_LANGUAGE && env.DESKPHONE_LANGUAGE !== 'auto' ? [env.DESKPHONE_LANGUAGE] : []
+  return [...new Set([...(hint ? [hint] : []), ...whisper, ...configured, env.DESKPHONE_VOICE_LANGUAGE ?? 'en'])]
+}
+
+async function guessLanguage(text: string, hint?: string | null): Promise<LanguageGuess> {
+  const preferred = preferredLanguages(hint, process.env)
+  try {
+    const out = await run('osascript', ['-l', 'JavaScript', '-e', DETECT_LANGUAGE, text])
+    return chooseLanguage(JSON.parse(String(out)), preferred)
+  } catch {
+    return { language: preferred[0], confident: false }
+  }
+}
+
+export async function detectLanguage(text: string, hint?: string | null): Promise<string> {
+  return (await guessLanguage(text, hint)).language
 }
 
 export function parseVoices(list: string): Voice[] {
@@ -43,8 +73,7 @@ export function pickVoice(lang: string, voices: Voice[]): string | null {
 
 let installedVoices: Promise<Voice[]> | null = null
 
-async function voiceFor(text: string): Promise<string> {
-  const lang = await detectLanguage(text)
+async function voiceFor(lang: string): Promise<string> {
   if (lang === VOICE_LANGUAGE) return VOICE
   const configured = process.env[`DESKPHONE_VOICE_${lang.toUpperCase()}`]
   if (configured) return configured
@@ -66,11 +95,15 @@ function run(cmd: string, args: string[]): Promise<Buffer> {
   })
 }
 
-export async function synthesize(text: string): Promise<Buffer> {
+// A session remembers its last confidently detected language, which then
+// decides replies too short to tell, so "Ja." after a Dutch reply stays Dutch.
+export async function synthesize(text: string, session?: { language: string | null }): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'deskphone-tts-'))
   const aiff = join(dir, 'speech.aiff')
   try {
-    const voice = await voiceFor(text)
+    const guess = await guessLanguage(text, session?.language)
+    if (session && guess.confident) session.language = guess.language
+    const voice = await voiceFor(guess.language)
     await run('say', [...(voice ? ['-v', voice] : []), '-o', aiff, text])
     return await run('ffmpeg', ['-v', 'error', '-i', aiff, '-af', 'highpass=f=300,lowpass=f=3400', '-f', 's16le', '-ac', '1', '-ar', String(SAMPLE_RATE), '-'])
   } finally {

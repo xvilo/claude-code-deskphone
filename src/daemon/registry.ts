@@ -8,6 +8,7 @@ export type Session = {
   voicemail: Voicemail[]
   lastReply: { text: string; at: number } | null
   transcriptPath: string | null
+  language: string | null
   outbox: PhoneEvent[]
   listener: ((event: PhoneEvent) => void) | null
 }
@@ -23,7 +24,7 @@ export class Registry {
     const existing = this.byPid.get(pid)
     if (existing) return existing
     const ext = this.allocate(preferredExt)
-    const session: Session = { pid, ext, cwd, voicemail: [], lastReply: null, transcriptPath: null, outbox: [], listener: null }
+    const session: Session = { pid, ext, cwd, voicemail: [], lastReply: null, transcriptPath: null, language: null, outbox: [], listener: null }
     this.byPid.set(pid, session)
     return session
   }
