@@ -3,3 +3,4 @@ models/
 *.wav
 *.aiff
 .env
+.claude/worktrees/
