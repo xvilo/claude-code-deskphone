@@ -61,7 +61,7 @@ The desk phone's `phone` account lives in `pjsip.conf`. To add another phone, su
 - "List my phones" shows each account, its number and whether it's registered.
 - "Remove the phone called softphone" deletes it.
 
-Phones can call each other. The desk phone is **1001**, and each added phone gets the next free number from **1002**. Dial the number (with `#` on the desk phone) and the other phone rings; the caller shows up as the account name and number. Numbers are published to Asterisk by the daemon, so phone-to-phone calls need the daemon running, like everything else.
+Phones can call each other. The desk phone is **1001**, and each added phone gets the next free number from **1002**. Dial the number (with `#` on the desk phone) and the other phone rings; the caller shows up with a name and number: the desk phone as "Office Automation" (its `callerid` in `pjsip.conf`), added phones as their account name. Numbers are published to Asterisk by the daemon, so phone-to-phone calls need the daemon running, like everything else.
 
 **iPhone and Android:** a SIP app that is in the background gets suspended, drops its registration within minutes and can't receive calls, even though it looks fine while open. Use an app with push notifications. Zoiper has a paid *Push Proxy* under **Settings → Incoming calls**; it needs notifications allowed in iOS and a registration expiry of at least ten minutes, which added phones are allowed (up to an hour). Set Zoiper's registration expiry to 3600 seconds.
 
