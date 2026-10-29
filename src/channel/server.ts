@@ -2,6 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { DAEMON_URL } from '../shared/config.ts'
+import { PHONE_STYLE } from '../shared/phone-style.ts'
 import { findClaudePid } from '../shared/pid.ts'
 
 const pid = findClaudePid()
@@ -15,7 +16,7 @@ const mcp = new Server(
     instructions: [
       'Deskphone lets the user talk to this session from an analog desk phone.',
       'Messages arrive as <channel source="phone" ext="..."> and are speech transcribed by whisper: expect missing punctuation and misheard words, and interpret them generously as the user\'s prompt.',
-      'When the session is phone-enabled, your final message of each turn is read aloud over the phone, so keep it short, conversational and free of tables or long code; put details in files instead.',
+      `Once the session is phone-enabled: ${PHONE_STYLE}`,
       'Call phone_register when the user asks for a phone number or runs /phone, and tell them the extension to dial.',
     ].join(' '),
   },
