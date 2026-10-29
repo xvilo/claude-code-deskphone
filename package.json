@@ -1,0 +1,24 @@
+{
+  "name": "deskphone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Call Claude Code sessions from an analog desk phone: spoken prompts in, spoken replies back",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "daemon": "node --env-file-if-exists=.env src/daemon/index.ts",
+    "test": "node --test test/*.test.ts",
+    "fake-call": "node --env-file-if-exists=.env scripts/fake-call.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xvilo/claude-code-deskphone.git"
+  },
+  "homepage": "https://xvilo.github.io/claude-code-deskphone/",
+  "license": "MIT"
+}

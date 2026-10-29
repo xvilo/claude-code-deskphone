@@ -1,0 +1,21 @@
+# Asterisk on the laptop itself. Use it on its own when the phone is always
+# plugged into this laptop, or as the ATA's failover SIP server next to a
+# public Asterisk on Kubernetes (see kustomization.yaml).
+services:
+  asterisk:
+    image: andrius/asterisk:22.10.1_debian-trixie-ff36a97
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/render.sh"]
+    environment:
+      # The laptop's address on the Internet Sharing link, where the ATA is.
+      EXTERNAL_IP: ${EXTERNAL_IP:-192.168.2.1}
+      SIP_PORT: "5060"
+      PHONE_PASSWORD: ${PHONE_PASSWORD:?set PHONE_PASSWORD in asterisk/.env}
+      ARI_PASSWORD: ${ARI_PASSWORD:?set ARI_PASSWORD in asterisk/.env}
+    volumes:
+      - ./config:/deskphone:ro
+      - ./render.sh:/render.sh:ro
+    ports:
+      - "5060:5060/udp"
+      - "10000-10019:10000-10019/udp"
+      - "127.0.0.1:8088:8088"

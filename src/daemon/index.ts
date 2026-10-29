@@ -1,0 +1,256 @@
+import { randomBytes } from 'node:crypto'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { basename } from 'node:path'
+import { Asterisk, type AriEvent } from './ari.ts'
+import { Call } from './call.ts'
+import { latestRecap } from './recap.ts'
+import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
+import { toSpeech } from './speech-text.ts'
+import { transcribe } from './stt.ts'
+import { synthesize, tone } from './tts.ts'
+
+const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
+const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
+const REPLY_WAIT_MS = Number(process.env.DESKPHONE_REPLY_WAIT_MS ?? 8000)
+const OUTBOUND_PREFIX = 'deskphone-out-'
+
+const registry = new Registry()
+const asterisk = new Asterisk(event => void onEvent(event))
+const beep = tone()
+const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args)
+
+type OutboundCall = { answered: (call: Call) => Promise<void>; missed: () => void }
+const outbound = new Map<string, OutboundCall>()
+const calls = new Map<string, Call>()
+
+// Outbound calls are serialized so two finishing sessions never ring the
+// single analog line at the same time.
+let line: Promise<unknown> = Promise.resolve()
+function onLine<T>(task: () => Promise<T>): Promise<T> {
+  const next = line.then(task, task)
+  line = next.catch(() => {})
+  return next
+}
+
+async function say(call: Call, text: string): Promise<void> {
+  if (!call.closed) await call.play(await synthesize(text))
+}
+
+async function captureAndDeliver(call: Call, session: Session, noSpeechTimeoutMs: number): Promise<boolean> {
+  await call.play(beep)
+  const audio = await call.listen({ noSpeechTimeoutMs })
+  if (!audio) {
+    const { frames, peakRms } = call.lastListen
+    log(`ext ${session.ext} heard nothing: ${frames} audio frames, peak level ${peakRms} (threshold ${process.env.DESKPHONE_VAD_THRESHOLD ?? 500})${call.closed ? ', caller hung up' : ''}`)
+    return false
+  }
+  const text = await transcribe(audio)
+  if (!text) {
+    await say(call, "Sorry, I didn't catch that.")
+    return false
+  }
+  const delivered = registry.deliver(session, { type: 'prompt', text, ext: session.ext })
+  log(`ext ${session.ext} heard${delivered ? '' : ' (session not connected, queued)'}:`, text)
+  await say(call, 'Got it.')
+  return true
+}
+
+function voicemailChanged(): void {
+  void asterisk.setMessageWaiting(registry.voicemailCount())
+}
+
+async function handleInbound(call: Call, ext: number): Promise<void> {
+  if (ext === VOICEMAIL_EXT) return playVoicemail(call)
+  const session = registry.byExt(ext)
+  if (!session) {
+    await say(call, `There is no Claude session on extension ${ext}.`)
+    return
+  }
+  if (session.voicemail.length) {
+    while (session.voicemail.length && !call.closed) {
+      const message = session.voicemail.shift()!
+      await say(call, message.text)
+      if (call.closed) session.voicemail.unshift(message)
+    }
+    voicemailChanged()
+  } else {
+    // Played replies were just heard, so only recap when there were none.
+    const recap = await recapFor(session)
+    await say(call, `Claude, extension ${ext}, ${basename(session.cwd)}.${recap ? ` ${recap}` : ''}`)
+  }
+  await captureAndDeliver(call, session, 15000)
+}
+
+// Claude Code's own recap when it's newer than the last reply, else the reply.
+async function recapFor(session: Session): Promise<string | null> {
+  const recap = session.transcriptPath ? await latestRecap(session.transcriptPath) : null
+  if (recap && (!session.lastReply || recap.at > session.lastReply.at)) return `Recap: ${toSpeech(recap.text)}`
+  return session.lastReply ? `Last time: ${session.lastReply.text}` : null
+}
+
+// Every missed reply across all sessions, oldest first, each with a chance
+// to answer that session before moving on.
+async function playVoicemail(call: Call): Promise<void> {
+  const count = registry.voicemailCount()
+  if (!count) return say(call, 'No new messages.')
+  await say(call, count === 1 ? 'One new message.' : `${count} new messages.`)
+  for (let next; !call.closed && (next = registry.takeOldestVoicemail()); ) {
+    const { session, message } = next
+    await say(call, `Extension ${session.ext}, ${basename(session.cwd)}. ${message.text}`)
+    if (call.closed) {
+      session.voicemail.unshift(message)
+      break
+    }
+    voicemailChanged()
+    await captureAndDeliver(call, session, REPLY_WAIT_MS)
+  }
+  voicemailChanged()
+  await say(call, 'No more messages.')
+}
+
+// A reply can finish while the call that asked for it is still saying
+// "Got it", and ringing a busy line fails at once.
+async function lineFree(timeoutMs = 60000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (calls.size > 0 && Date.now() < deadline) await new Promise(r => setTimeout(r, 500))
+}
+
+function ring(session: Session, text: string): Promise<void> {
+  return onLine(
+    () =>
+      lineFree().then(() => new Promise<void>(resolve => {
+        const callId = randomBytes(6).toString('hex')
+        const missed = (reason: string) => {
+          clearTimeout(timer)
+          outbound.delete(callId)
+          registry.leaveVoicemail(session, text)
+          voicemailChanged()
+          log(`ext ${session.ext}: ${reason}, left voicemail (${registry.voicemailCount()} waiting)`)
+          resolve()
+        }
+        const timer = setTimeout(() => {
+          missed('no answer')
+          void asterisk.hangup(OUTBOUND_PREFIX + callId)
+        }, (RING_SECONDS + 10) * 1000)
+
+        outbound.set(callId, {
+          missed: () => missed('no answer'),
+          answered: async call => {
+            clearTimeout(timer)
+            outbound.delete(callId)
+            try {
+              await say(call, text)
+              const replied = await captureAndDeliver(call, session, REPLY_WAIT_MS)
+              if (!replied) await say(call, 'Okay, bye.')
+            } finally {
+              resolve()
+            }
+          },
+        })
+
+        asterisk.originate(OUTBOUND_PREFIX + callId, session.ext, callId, RING_SECONDS).catch(err => missed(`originate failed (${err.message})`))
+      })),
+  )
+}
+
+async function runCall(channelId: string, direction: string, arg: string): Promise<void> {
+  let call: Call | undefined
+  try {
+    if (direction === 'inbound') await asterisk.answer(channelId)
+    call = new Call(() => asterisk.teardown(channelId))
+    calls.set(channelId, call)
+    await asterisk.attachMedia(channelId, call.attach)
+    if (direction === 'inbound') {
+      log(`inbound call to ext ${arg}`)
+      await handleInbound(call, Number(arg))
+    } else {
+      await outbound.get(arg)?.answered(call)
+    }
+  } catch (err) {
+    log('call failed:', (err as Error).message)
+    if (call) await say(call, 'Something went wrong on the laptop.').catch(() => {})
+  } finally {
+    calls.delete(channelId)
+    if (call) await call.hangup()
+    else await asterisk.teardown(channelId)
+  }
+}
+
+async function onEvent(event: AriEvent): Promise<void> {
+  const channel = event.channel
+  if (!channel) return
+  if (event.type === 'StasisStart') {
+    // The media channels this daemon creates also enter the app, without args.
+    const [direction, arg] = event.args ?? []
+    if (direction === 'inbound' || direction === 'outbound') await runCall(channel.id, direction, arg)
+  } else if (event.type === 'StasisEnd' || event.type === 'ChannelDestroyed') {
+    calls.get(channel.id)?.markClosed()
+    if (event.type === 'ChannelDestroyed' && channel.id.startsWith(OUTBOUND_PREFIX)) {
+      outbound.get(channel.id.slice(OUTBOUND_PREFIX.length))?.missed()
+    }
+  }
+}
+
+async function readJson(req: IncomingMessage): Promise<any> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req) chunks.push(chunk as Buffer)
+  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+}
+
+function send(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(body))
+}
+
+const httpServer = createServer(async (req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  try {
+    if (req.method === 'POST' && url.pathname === '/register') {
+      const { pid, cwd, ext } = await readJson(req)
+      const session = registry.register(Number(pid), String(cwd ?? ''), ext ? Number(ext) : undefined)
+      log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})`)
+      return send(res, 200, { ext: session.ext })
+    }
+    if (req.method === 'POST' && url.pathname === '/unregister') {
+      const { pid } = await readJson(req)
+      return send(res, 200, { removed: registry.unregister(Number(pid)) })
+    }
+    if (req.method === 'POST' && url.pathname === '/stop') {
+      const { pid, text, transcript } = await readJson(req)
+      const session = registry.get(Number(pid))
+      if (!session) return send(res, 404, { error: 'session not registered' })
+      const speech = toSpeech(String(text ?? ''))
+      if (!speech) return send(res, 200, { skipped: true })
+      session.lastReply = { text: speech, at: Date.now() }
+      if (typeof transcript === 'string') session.transcriptPath = transcript
+      log(`ext ${session.ext}: turn finished, ringing`)
+      void ring(session, speech)
+      return send(res, 202, { ringing: session.ext })
+    }
+    if (req.method === 'GET' && url.pathname === '/events') {
+      const session = registry.get(Number(url.searchParams.get('pid')))
+      if (!session) return send(res, 404, { error: 'session not registered' })
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
+      res.write(': connected\n\n')
+      const keepAlive = setInterval(() => res.write(': ping\n\n'), 15000)
+      const detach = registry.attach(session, event => res.write(`data: ${JSON.stringify(event)}\n\n`))
+      req.on('close', () => {
+        clearInterval(keepAlive)
+        detach()
+      })
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/status') {
+      return send(res, 200, {
+        asterisk: asterisk.active,
+        sessions: registry.list().map(s => ({ pid: s.pid, ext: s.ext, cwd: s.cwd, voicemail: s.voicemail.length, connected: !!s.listener })),
+      })
+    }
+    send(res, 404, { error: 'not found' })
+  } catch (err) {
+    send(res, 400, { error: (err as Error).message })
+  }
+})
+
+httpServer.listen(HTTP_PORT, '127.0.0.1', () => log(`control API on http://127.0.0.1:${HTTP_PORT}`))
+void asterisk.connect(log, voicemailChanged)

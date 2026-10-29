@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asterisk
+  labels:
+    app: asterisk
+spec:
+  replicas: 1
+  # SIP registration state lives in the one pod; never run two side by side.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: asterisk
+  template:
+    metadata:
+      labels:
+        app: asterisk
+    spec:
+      containers:
+        - name: asterisk
+          image: andrius/asterisk:22.10.1_debian-trixie-ff36a97
+          command: ["/bin/sh", "/deskphone/render.sh"]
+          env:
+            # What phones dial, advertised in SIP and SDP. Resolved once at
+            # startup, so restart the pod after the record changes.
+            - name: EXTERNAL_IP
+              value: asterisk.example.com
+            # Off 5060 to dodge most SIP scanners.
+            - name: SIP_PORT
+              value: "15060"
+          envFrom:
+            - secretRef:
+                name: asterisk-secrets
+          ports:
+            - name: sip
+              containerPort: 15060
+              protocol: UDP
+            - name: http
+              containerPort: 8088
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: http
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /deskphone
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: asterisk-config

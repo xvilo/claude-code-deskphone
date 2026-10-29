@@ -1,0 +1,38 @@
+# ARI and the per-call media WebSockets, the only parts of Asterisk's HTTP
+# server that are published. ARI needs ARI_PASSWORD; media URLs carry an
+# ephemeral per-call id. Assumes ingress-nginx and a cert-manager ClusterIssuer
+# named letsencrypt; adjust both to your cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: asterisk
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # The daemon holds the ARI events WebSocket open for hours; it reconnects
+    # on drop, but don't cut it every minute.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - asterisk.example.com
+      secretName: asterisk-tls
+  rules:
+    - host: asterisk.example.com
+      http:
+        paths:
+          - path: /ari
+            pathType: Prefix
+            backend:
+              service:
+                name: asterisk-http
+                port:
+                  number: 8088
+          - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: asterisk-http
+                port:
+                  number: 8088

@@ -1,0 +1,48 @@
+---
+title: Installation
+nav_order: 3
+---
+
+# Installation
+
+Everything except Asterisk and the ATA runs on your Mac.
+
+## 1. Clone and run the setup script
+
+```sh
+git clone https://github.com/xvilo/claude-code-deskphone.git
+cd claude-code-deskphone
+scripts/setup.sh
+```
+
+`scripts/setup.sh`:
+- installs `whisper-cpp` and `ffmpeg` with Homebrew, if missing
+- runs `npm install`
+- downloads the multilingual whisper `small` model (~470 MB) to `models/`
+- registers this clone as a local plugin marketplace and installs the `deskphone` plugin into Claude Code
+
+`WHISPER_MODEL=base scripts/setup.sh` gets a smaller, faster but less accurate model. Then point `DESKPHONE_WHISPER_MODEL` at `models/ggml-base.bin`.
+
+The plugin is installed from your clone rather than straight from GitHub on purpose: its channel server needs the clone's `node_modules`, and the daemon runs from the clone anyway.
+
+## 2. Create the config files
+
+```sh
+cp .env.example .env                    # read by the daemon
+cp asterisk/.env.example asterisk/.env  # read by Asterisk
+```
+
+Generate two passwords and put them in `asterisk/.env`:
+
+```sh
+openssl rand -hex 12   # PHONE_PASSWORD: the ATA's SIP password
+openssl rand -hex 16   # ARI_PASSWORD: the daemon's Asterisk password
+```
+
+Copy `ARI_PASSWORD` into `.env` as `DESKPHONE_ARI_PASSWORD`. You set `DESKPHONE_ARI_URL` in the next step, once you know where Asterisk runs.
+
+## 3. Pick a voice (optional)
+
+The daemon speaks with the macOS **system voice** unless `DESKPHONE_VOICE` is set. `say -v` can't select Siri voices by name, but if you choose a Siri voice under **System Settings → Accessibility → Spoken Content → System voice**, the daemon uses it. You can also download a Premium voice there (for example *Zoe (Premium)*) and set `DESKPHONE_VOICE="Zoe (Premium)"` in `.env`.
+
+Next: [run Asterisk](asterisk).

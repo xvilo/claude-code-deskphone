@@ -1,0 +1,20 @@
+title: Deskphone for Claude Code
+description: Call your Claude Code sessions from a real analog desk phone. Speak a prompt, get called back with the answer read aloud.
+url: https://xvilo.github.io
+baseurl: /claude-code-deskphone
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+search_enabled: true
+heading_anchors: true
+color_scheme: light
+aux_links:
+  GitHub: https://github.com/xvilo/claude-code-deskphone
+aux_links_new_tab: true
+footer_content: "MIT licensed. Not affiliated with Anthropic."
+gh_edit_link: true
+gh_edit_repository: https://github.com/xvilo/claude-code-deskphone
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit

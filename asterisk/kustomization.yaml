@@ -1,0 +1,24 @@
+# Public Asterisk on Kubernetes: kubectl apply -k asterisk/
+# Before applying, replace asterisk.example.com in kubernetes/*.yaml with your
+# hostname and create asterisk/.env (see .env.example).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: deskphone
+resources:
+  - kubernetes/namespace.yaml
+  - kubernetes/deployment.yaml
+  - kubernetes/service.yaml
+  - kubernetes/ingress.yaml
+configMapGenerator:
+  - name: asterisk-config
+    files:
+      - config/ari.conf
+      - config/extensions.conf
+      - config/http.conf
+      - config/pjsip.conf
+      - config/rtp.conf
+      - render.sh
+secretGenerator:
+  - name: asterisk-secrets
+    envs:
+      - .env

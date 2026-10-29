@@ -1,0 +1,2 @@
+#!/bin/sh
+exec claude --dangerously-load-development-channels plugin:deskphone@deskphone-local "$@"

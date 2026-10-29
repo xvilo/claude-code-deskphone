@@ -1,0 +1,12 @@
+{
+  "name": "deskphone-local",
+  "owner": { "name": "Sem Schilder" },
+  "description": "Local marketplace for the deskphone plugin",
+  "plugins": [
+    {
+      "name": "deskphone",
+      "source": "./",
+      "description": "Talk to Claude Code over an analog desk phone"
+    }
+  ]
+}

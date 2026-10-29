@@ -1,0 +1,36 @@
+{
+  "name": "deskphone",
+  "displayName": "Deskphone",
+  "version": "0.1.0",
+  "description": "Dial into a Claude Code session from an analog phone, and get called back when it finishes",
+  "author": {
+    "name": "Sem Schilder",
+    "url": "https://github.com/xvilo"
+  },
+  "license": "MIT",
+  "mcpServers": {
+    "phone": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/src/channel/server.ts"
+      ]
+    }
+  },
+  "channels": [
+    {
+      "server": "phone",
+      "displayName": "Deskphone"
+    }
+  ],
+  "homepage": "https://xvilo.github.io/claude-code-deskphone/",
+  "repository": "https://github.com/xvilo/claude-code-deskphone",
+  "keywords": [
+    "phone",
+    "voice",
+    "asterisk",
+    "sip",
+    "whisper",
+    "tts",
+    "channels"
+  ]
+}
