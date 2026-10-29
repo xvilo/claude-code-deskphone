@@ -4,6 +4,7 @@ import { basename } from 'node:path'
 import { Asterisk, type AriEvent } from './ari.ts'
 import { Call } from './call.ts'
 import { isScreenLocked } from './lock.ts'
+import { describeSessions } from './menu.ts'
 import { describePermission, parseDecision, type Decision } from './permission.ts'
 import { phrases } from './phrases.ts'
 import { PinGuard } from './pin.ts'
@@ -20,6 +21,7 @@ import { DESK_PHONE, DeviceStore } from './devices.ts'
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
 const REPLY_WAIT_MS = Number(process.env.DESKPHONE_REPLY_WAIT_MS ?? 8000)
+const MENU_WAIT_MS = 6000
 const OUTBOUND_PREFIX = 'deskphone-out-'
 
 const registry = new Registry()
@@ -149,7 +151,7 @@ function onAsteriskConnect(): void {
 
 async function handleInbound(call: Call, ext: number): Promise<void> {
   pruneSessions()
-  if (ext === VOICEMAIL_EXT) return playVoicemail(call)
+  if (ext === VOICEMAIL_EXT) return voicemailMenu(call)
   const session = registry.byExt(ext)
   if (!session) {
     await say(call, `There is no Claude session on extension ${ext}.`)
@@ -180,6 +182,22 @@ async function recapFor(session: Session): Promise<{ text: string; lang: string 
   }
   const last = session.lastReply
   return last ? { text: `${phrases(last.lang).lastTime} ${last.text}`, lang: last.lang } : null
+}
+
+// Keys count from the first word of the prompt, so regulars needn't hear it
+// out. Silence falls through to the messages, which is all 100 used to do.
+async function voicemailMenu(call: Call): Promise<void> {
+  const prompt = await synthesize('Press 1 for messages, 2 for sessions.')
+  for (let attempt = 0; attempt < 2 && !call.closed; attempt++) {
+    const key = call.collectDigits({ max: 1, timeoutMs: MENU_WAIT_MS })
+    call.resume()
+    await call.play(prompt)
+    const pressed = await key
+    call.resume()
+    if (pressed === null || pressed === '1') return playVoicemail(call)
+    if (pressed === '2') return say(call, describeSessions(registry.list()))
+  }
+  await say(call, 'Okay, bye.')
 }
 
 // Every missed reply across all sessions, oldest first, each with a chance
