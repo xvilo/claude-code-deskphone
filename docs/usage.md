@@ -37,6 +37,19 @@ When a phone-enabled session finishes a turn, the phone rings.
 
 Callbacks wait until the line is free. If Claude answers while you're still on the call that asked the question, the phone rings right after you hang up.
 
+## Permission prompts
+
+When Claude needs your permission for a tool call, the phone rings. You hear something like "Extension 101, customer-frontend, needs permission to read StripeV3Add.js. Say yes to allow, or no to deny." After the beep:
+
+- **"Yes"** (or "yeah", "go ahead", "allow", "ja") approves this one call.
+- **"No"** (or "deny", "stop", "nee") denies it, and Claude is told it was denied over the phone. "No" wins when both appear.
+- **Anything else, silence, or no answer** leaves the prompt on screen.
+
+Answering the prompt on screen first stops the phone ringing. Only the single request is approved; no permission rules are added.
+
+{: .warning }
+Anyone who picks up the phone can approve a request. Turn this off by removing the `PermissionRequest` hook from `hooks/hooks.json` if that's a concern.
+
 ## Voicemail
 
 While replies are waiting, lifting the handset gives a **stutter dial tone** instead of the steady one.

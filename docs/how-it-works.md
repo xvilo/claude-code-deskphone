@@ -14,6 +14,7 @@ nav_order: 9
 | Daemon (`src/daemon`) | Mac | Holds the ARI connection, speech in and out, extensions, voicemail. HTTP control API on `127.0.0.1:7788`. |
 | Channel MCP server (`src/channel`) | one per Claude session | Registers the session with the daemon and pushes transcribed speech into it as `notifications/claude/channel`. Exposes `phone_register`, `phone_unregister` and `phone_status`. |
 | Stop hook (`src/hooks/stop.ts`) | one per turn | Async. Posts `last_assistant_message` and the transcript path to the daemon, which rings the phone. |
+| Permission hook (`src/hooks/permission.ts`) | per permission prompt | Synchronous `PermissionRequest` hook. Asks the daemon to call and returns `allow` or `deny`, or nothing, which keeps the prompt on screen. |
 
 The channel server and the Stop hook both walk up the process tree to the owning `claude` process. Its PID links them to the same session in the daemon.
 

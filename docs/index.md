@@ -12,6 +12,7 @@ Talk to [Claude Code](https://claude.com/claude-code) from a real, corded desk p
 - Run `/deskphone:phone` in a session and it gets an extension (101, 102, …).
 - Pick up the phone, dial that extension and speak. Your words arrive in the session as a prompt.
 - When Claude finishes, the phone rings. It reads the answer aloud, beeps, and listens. Your reply becomes the next prompt, or stay silent and it hangs up.
+- When Claude needs permission for a tool, the phone rings and reads the request. Say yes or no.
 - Missed the call? The reply goes to voicemail and the phone plays a stutter dial tone. Dial `100#` to hear every waiting reply.
 - Dial a session with nothing waiting and it reads Claude Code's own `※ recap` of where that session is.
 

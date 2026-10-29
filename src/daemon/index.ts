@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { basename } from 'node:path'
 import { Asterisk, type AriEvent } from './ari.ts'
 import { Call } from './call.ts'
+import { describePermission, parseDecision, type Decision } from './permission.ts'
 import { latestRecap } from './recap.ts'
 import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
 import { toSpeech } from './speech-text.ts'
@@ -115,41 +116,87 @@ async function lineFree(timeoutMs = 60000): Promise<void> {
   while (calls.size > 0 && Date.now() < deadline) await new Promise(r => setTimeout(r, 500))
 }
 
-function ring(session: Session, text: string): Promise<void> {
-  return onLine(
-    () =>
-      lineFree().then(() => new Promise<void>(resolve => {
-        const callId = randomBytes(6).toString('hex')
-        const missed = (reason: string) => {
+// Rings the phone for a session. answered runs once it's picked up; missed
+// runs when it isn't (or the caller gives up via signal) and supplies the result.
+function callPhone<T>(
+  session: Session,
+  answered: (call: Call) => Promise<T>,
+  missed: (reason: string) => T,
+  signal?: AbortSignal,
+): Promise<T> {
+  return onLine(async () => {
+    await lineFree()
+    if (signal?.aborted) return missed('cancelled')
+    return new Promise<T>(resolve => {
+      const callId = randomBytes(6).toString('hex')
+      const channelId = OUTBOUND_PREFIX + callId
+      const giveUp = (reason: string) => {
+        if (!outbound.has(callId)) return
+        clearTimeout(timer)
+        outbound.delete(callId)
+        signal?.removeEventListener('abort', cancel)
+        void asterisk.hangup(channelId)
+        resolve(missed(reason))
+      }
+      const cancel = () => giveUp('cancelled')
+      const timer = setTimeout(() => giveUp('no answer'), (RING_SECONDS + 10) * 1000)
+      signal?.addEventListener('abort', cancel, { once: true })
+
+      outbound.set(callId, {
+        missed: () => giveUp('no answer'),
+        answered: async call => {
           clearTimeout(timer)
           outbound.delete(callId)
-          registry.leaveVoicemail(session, text)
-          voicemailChanged()
-          log(`ext ${session.ext}: ${reason}, left voicemail (${registry.voicemailCount()} waiting)`)
-          resolve()
-        }
-        const timer = setTimeout(() => {
-          missed('no answer')
-          void asterisk.hangup(OUTBOUND_PREFIX + callId)
-        }, (RING_SECONDS + 10) * 1000)
+          signal?.removeEventListener('abort', cancel)
+          let result: T | undefined
+          try {
+            result = await answered(call)
+          } finally {
+            resolve(result as T)
+          }
+        },
+      })
 
-        outbound.set(callId, {
-          missed: () => missed('no answer'),
-          answered: async call => {
-            clearTimeout(timer)
-            outbound.delete(callId)
-            try {
-              await say(call, text)
-              const replied = await captureAndDeliver(call, session, REPLY_WAIT_MS)
-              if (!replied) await say(call, 'Okay, bye.')
-            } finally {
-              resolve()
-            }
-          },
-        })
+      asterisk.originate(channelId, session.ext, callId, RING_SECONDS).catch(err => giveUp(`originate failed (${err.message})`))
+    })
+  })
+}
 
-        asterisk.originate(OUTBOUND_PREFIX + callId, session.ext, callId, RING_SECONDS).catch(err => missed(`originate failed (${err.message})`))
-      })),
+function ring(session: Session, text: string): Promise<void> {
+  return callPhone(
+    session,
+    async call => {
+      await say(call, text)
+      const replied = await captureAndDeliver(call, session, REPLY_WAIT_MS)
+      if (!replied) await say(call, 'Okay, bye.')
+    },
+    reason => {
+      registry.leaveVoicemail(session, text)
+      voicemailChanged()
+      log(`ext ${session.ext}: ${reason}, left voicemail (${registry.voicemailCount()} waiting)`)
+    },
+  )
+}
+
+// Asks by phone whether Claude may go ahead. null leaves the decision to the
+// prompt on screen: no answer, an unclear answer, or answered there first.
+function askPermission(session: Session, request: string, signal: AbortSignal): Promise<Decision> {
+  return callPhone<Decision>(
+    session,
+    async call => {
+      await say(call, `Extension ${session.ext}, ${basename(session.cwd)}, needs permission to ${request}. Say yes to allow, or no to deny.`)
+      await call.play(beep)
+      const audio = await call.listen({ noSpeechTimeoutMs: REPLY_WAIT_MS })
+      const decision = audio ? parseDecision(await transcribe(audio)) : null
+      await say(call, decision === 'allow' ? 'Allowed.' : decision === 'deny' ? 'Denied.' : "I'll leave it on screen.")
+      log(`ext ${session.ext}: permission to ${request}: ${decision ?? 'no decision'}`)
+      return decision
+    },
+    reason => {
+      log(`ext ${session.ext}: permission call ${reason}, left on screen`)
+      return null
+    },
+    signal,
   )
 }
 
@@ -226,6 +273,18 @@ const httpServer = createServer(async (req, res) => {
       log(`ext ${session.ext}: turn finished, ringing`)
       void ring(session, speech)
       return send(res, 202, { ringing: session.ext })
+    }
+    if (req.method === 'POST' && url.pathname === '/permission') {
+      const { pid, tool_name, tool_input } = await readJson(req)
+      const session = registry.get(Number(pid))
+      if (!session) return send(res, 404, { error: 'session not registered' })
+      // The hook process ends when the prompt is answered on screen; stop ringing then.
+      const answeredElsewhere = new AbortController()
+      res.on('close', () => answeredElsewhere.abort())
+      const request = describePermission(String(tool_name ?? ''), tool_input ?? {})
+      log(`ext ${session.ext}: asking permission to ${request}`)
+      const decision = await askPermission(session, request, answeredElsewhere.signal)
+      return send(res, 200, { decision })
     }
     if (req.method === 'GET' && url.pathname === '/events') {
       const session = registry.get(Number(url.searchParams.get('pid')))
