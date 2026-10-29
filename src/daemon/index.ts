@@ -5,13 +5,14 @@ import { Asterisk, type AriEvent } from './ari.ts'
 import { Call } from './call.ts'
 import { isScreenLocked } from './lock.ts'
 import { describePermission, parseDecision, type Decision } from './permission.ts'
+import { phrases } from './phrases.ts'
 import { PinGuard } from './pin.ts'
 import { answerText, parseKeyedChoice, parseSpokenChoice, speakQuestion, type Choice, type Question } from './questions.ts'
 import { latestRecap } from './recap.ts'
 import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
-import { toSpeech } from './speech-text.ts'
+import { proseOf, toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
-import { synthesize, tone } from './tts.ts'
+import { detectLanguage, synthesize, tone } from './tts.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
@@ -129,16 +130,21 @@ async function handleInbound(call: Call, ext: number): Promise<void> {
   } else {
     // Played replies were just heard, so only recap when there were none.
     const recap = await recapFor(session)
-    await say(call, `Claude, extension ${ext}, ${basename(session.cwd)}.${recap ? ` ${recap}` : ''}`)
+    const intro = phrases(recap?.lang ?? 'en').extension(ext, basename(session.cwd))
+    await say(call, `Claude, ${intro}.${recap ? ` ${recap.text}` : ''}`)
   }
   await captureAndDeliver(call, session, 15000)
 }
 
 // Claude Code's own recap when it's newer than the last reply, else the reply.
-async function recapFor(session: Session): Promise<string | null> {
+async function recapFor(session: Session): Promise<{ text: string; lang: string } | null> {
   const recap = session.transcriptPath ? await latestRecap(session.transcriptPath) : null
-  if (recap && (!session.lastReply || recap.at > session.lastReply.at)) return `Recap: ${toSpeech(recap.text)}`
-  return session.lastReply ? `Last time: ${session.lastReply.text}` : null
+  if (recap && (!session.lastReply || recap.at > session.lastReply.at)) {
+    const lang = await detectLanguage(proseOf(recap.text))
+    return { text: `${phrases(lang).recap} ${toSpeech(recap.text, undefined, lang)}`, lang }
+  }
+  const last = session.lastReply
+  return last ? { text: `${phrases(last.lang).lastTime} ${last.text}`, lang: last.lang } : null
 }
 
 // Every missed reply across all sessions, oldest first, each with a chance
@@ -149,7 +155,7 @@ async function playVoicemail(call: Call): Promise<void> {
   await say(call, count === 1 ? 'One new message.' : `${count} new messages.`)
   for (let next; !call.closed && (next = registry.takeOldestVoicemail()); ) {
     const { session, message } = next
-    await say(call, `Extension ${session.ext}, ${basename(session.cwd)}. ${message.text}`)
+    await say(call, `${phrases(message.lang).extension(session.ext, basename(session.cwd))}. ${message.text}`)
     if (call.closed) {
       session.voicemail.unshift(message)
       break
@@ -214,7 +220,7 @@ function callPhone<T>(
   })
 }
 
-function ring(session: Session, text: string): Promise<void> {
+function ring(session: Session, text: string, lang: string): Promise<void> {
   return callPhone(
     session,
     async call => {
@@ -223,7 +229,7 @@ function ring(session: Session, text: string): Promise<void> {
       if (!replied) await say(call, 'Okay, bye.')
     },
     reason => {
-      registry.leaveVoicemail(session, text)
+      registry.leaveVoicemail(session, text, lang)
       voicemailChanged()
       log(`ext ${session.ext}: ${reason}, left voicemail (${registry.voicemailCount()} waiting)`)
     },
@@ -234,16 +240,17 @@ function ring(session: Session, text: string): Promise<void> {
 // prompt on screen: no answer, an unclear answer, or answered there first.
 // Claude's multiple-choice questions, one after another. null if any goes
 // unanswered, so the dialog stays on screen.
-function askQuestions(session: Session, questions: Question[], signal: AbortSignal): Promise<Record<string, string> | null> {
+async function askQuestions(session: Session, questions: Question[], signal: AbortSignal): Promise<Record<string, string> | null> {
+  const lang = await detectLanguage(questions.map(q => q.question).join(' '))
+  const phrase = phrases(lang)
   return callPhone<Record<string, string> | null>(
     session,
     async call => {
-      const intro = questions.length === 1 ? 'has a question.' : `has ${questions.length} questions.`
-      await say(call, `Extension ${session.ext}, ${basename(session.cwd)}, ${intro}`)
+      await say(call, `${phrase.extension(session.ext, basename(session.cwd))}, ${phrase.questions(questions.length)}`)
       const answers: Record<string, string> = {}
       for (const q of questions) {
         call.resume()
-        await say(call, speakQuestion(q))
+        await say(call, speakQuestion(q, lang))
         if (!(await unlock(call))) break
         call.resume()
         await call.play(beep)
@@ -364,12 +371,13 @@ const httpServer = createServer(async (req, res) => {
       const { pid, text, transcript } = await readJson(req)
       const session = registry.get(Number(pid))
       if (!session) return send(res, 404, { error: 'session not registered' })
-      const speech = toSpeech(String(text ?? ''))
+      const lang = await detectLanguage(proseOf(String(text ?? '')))
+      const speech = toSpeech(String(text ?? ''), undefined, lang)
       if (!speech) return send(res, 200, { skipped: true })
-      session.lastReply = { text: speech, at: Date.now() }
+      session.lastReply = { text: speech, at: Date.now(), lang }
       if (typeof transcript === 'string') session.transcriptPath = transcript
       log(`ext ${session.ext}: turn finished, ringing`)
-      void ring(session, speech)
+      void ring(session, speech, lang)
       return send(res, 202, { ringing: session.ext })
     }
     if (req.method === 'POST' && url.pathname === '/permission') {

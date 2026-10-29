@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { answerText, parseKeyedChoice, parseSpokenChoice, type Question } from '../src/daemon/questions.ts'
+import { answerText, parseKeyedChoice, parseSpokenChoice, speakQuestion, type Question } from '../src/daemon/questions.ts'
 
 const single: Question = {
   question: 'Which follow-up next?',
   options: [{ label: 'Adyen load race' }, { label: 'Major npm upgrades' }, { label: 'Sign commits' }, { label: 'Clean up worktree' }],
 }
 const multi: Question = { ...single, multiSelect: true }
+
+test('reads the answering instructions in the question language', () => {
+  const q: Question = { question: 'Welke eerst?', options: [{ label: 'Tests' }, { label: 'Docs' }] }
+  assert.equal(speakQuestion(q, 'nl'), 'Welke eerst? 1: Tests. 2: Docs. Zeg een nummer, of toets het in. Of zeg gewoon je eigen antwoord.')
+  assert.ok(speakQuestion(q).endsWith('Say a number, or press it on the keypad. Or just say your own answer.'))
+})
 
 test('picks spoken numbers as digits or words', () => {
   assert.deepEqual(parseSpokenChoice('Do 1.', single), { picked: [1] })

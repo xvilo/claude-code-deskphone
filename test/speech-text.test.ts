@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { toSpeech } from '../src/daemon/speech-text.ts'
+import { proseOf, toSpeech } from '../src/daemon/speech-text.ts'
 import { cleanTranscript } from '../src/daemon/stt.ts'
 
 test('strips markdown and code for speech', () => {
@@ -16,6 +16,20 @@ test('truncates long text at a sentence boundary', () => {
   const text = toSpeech('First sentence here. '.repeat(20), 100)
   assert.ok(text.endsWith('here. The rest is on screen.'))
   assert.ok(text.length < 140)
+})
+
+test('speaks its own phrases in the reply language', () => {
+  const md = 'Zie https://github.com/foo/bar\n\n```ts\nconst x = 1\n```'
+  assert.equal(toSpeech(md, 900, 'nl'), 'Zie een link naar github.com\n(code op het scherm)')
+  assert.ok(toSpeech('Eerste zin hier. '.repeat(20), 100, 'nl').endsWith('hier. De rest staat op het scherm.'))
+})
+
+test('falls back to English phrases for other languages', () => {
+  assert.equal(toSpeech('```\nx\n```', 900, 'fr'), '(code on screen)')
+})
+
+test('leaves code and links out of language detection', () => {
+  assert.equal(proseOf('Klaar `npm test` zie https://x.dev/a\n```ts\nconst x\n```').replace(/\s+/g, ' ').trim(), 'Klaar zie')
 })
 
 test('drops whisper non-speech annotations', () => {
