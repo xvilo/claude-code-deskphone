@@ -10,7 +10,8 @@
   "scripts": {
     "daemon": "node --env-file-if-exists=.env src/daemon/index.ts",
     "test": "node --test test/*.test.ts",
-    "fake-call": "node --env-file-if-exists=.env scripts/fake-call.ts"
+    "fake-call": "node --env-file-if-exists=.env scripts/fake-call.ts",
+    "set-pin": "node scripts/set-pin.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0"

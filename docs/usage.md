@@ -56,6 +56,33 @@ Answering the prompt on screen first stops the phone ringing. Only the single re
 {: .warning }
 Anyone who picks up the phone can approve a request. Turn this off by removing the `PermissionRequest` hook from `hooks/hooks.json` if that's a concern.
 
+## Questions from Claude
+
+When Claude asks a multiple-choice question (the dialog with numbered options), the phone rings and reads the question and its options: "1: Adyen load race. 2: Major npm upgrades. …". After the beep:
+
+- **Single choice:** say "one", "do 2" or "option three", or press the digit on the keypad.
+- **Multiple choice:** say "do 1 and 3" or "all of them", or press the digits and then `#`.
+- **Your own answer:** say anything without a number and it's sent as a free-text answer, like typing in "Type something".
+- **"Never mind", silence, or no answer** leaves the dialog on screen.
+
+Several questions in one dialog are asked one after another. The dialog is answered only if every question gets an answer.
+
+## Locked Mac and PIN
+
+While this Mac's screen is locked, the phone asks for a PIN before it takes any input: before you can speak a prompt, approve a permission or answer a question. Greetings, recaps, callbacks and voicemail still play without it.
+
+Set the PIN once per Mac:
+
+```sh
+npm run set-pin    # 4 to 8 digits
+```
+
+It's stored as a salted scrypt hash in `~/.config/deskphone/pin`, readable only by you. When asked, type the PIN on the keypad followed by `#`. Typing interrupts the spoken prompt.
+
+- One correct PIN unlocks the rest of that call.
+- Three wrong tries end the call. Five wrong PINs in a row, across calls, block PIN entry for 15 minutes.
+- Locked with no PIN set, or if the lock state can't be read: nothing is accepted by phone. It fails closed.
+
 ## Voicemail
 
 While replies are waiting, lifting the handset gives a **stutter dial tone** instead of the steady one.

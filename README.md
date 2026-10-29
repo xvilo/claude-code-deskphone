@@ -7,6 +7,8 @@ Call your [Claude Code](https://claude.com/claude-code) sessions from a real ana
 - Each session gets an extension (`/deskphone:phone`), and you dial `101#` to talk to it.
 - Your speech is transcribed locally with whisper.cpp and arrives in the session as a prompt.
 - When the turn ends, Claude calls back and reads its reply with macOS text-to-speech.
+- Answer Claude's multiple-choice questions by saying "do 1 and 3" or pressing the digits.
+- While your Mac is locked, a PIN is needed before the phone accepts input.
 - Press any key to cut Claude short and go straight to the beep.
 - Permission prompts ring the phone too: say yes or no.
 - Missed calls go to voicemail, signalled by a stutter dial tone. Dial `100#` to hear them.

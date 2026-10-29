@@ -48,6 +48,16 @@ See [Phone setup](phone#2-find-the-atas-ip-address): Internet Sharing is going t
 
 `ext … heard (session not connected, queued)` means the session's channel server isn't connected to the daemon. It reconnects every few seconds and then gets the queued prompt. If it never does, the session wasn't started with the channel flag (`scripts/claude-phone`).
 
+### Asked for a PIN while the Mac is unlocked, or never asked
+
+The daemon reads the lock state from `ioreg -n Root -d1` (`CGSSessionScreenIsLocked`) at the moment it needs input, and treats any error as locked. Check it yourself:
+
+```sh
+ioreg -n Root -d1 | grep -o '"CGSSessionScreenIsLocked"=[A-Za-z]*'
+```
+
+It prints `=Yes` only while locked. Run it from an SSH session, or with `sleep 10;` in front, to check while locked.
+
 ### Test without a phone
 
 ```sh

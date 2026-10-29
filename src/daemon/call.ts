@@ -12,6 +12,11 @@ export class Call {
   closed = false
   // Set by a keypress: speech is skipped until the next beep.
   skipping = false
+  // A PIN was entered on this call, so it may send prompts and approvals.
+  authorized = false
+  private digitListener: ((digit: string) => void) | null = null
+  private stopDigits: (() => void) | null = null
+  private stopListening: (() => void) | null = null
   lastListen: ListenStats = { frames: 0, peakRms: 0 }
   readonly started: Promise<void>
   private frameListener: ((frame: Buffer) => void) | null = null
@@ -63,6 +68,35 @@ export class Call {
     this.skipping = false
   }
 
+  // Keys feed a running collectDigits; otherwise they skip ahead to the beep.
+  keypress(digit: string): void {
+    if (this.digitListener) this.digitListener(digit)
+    else this.interrupt()
+  }
+
+  collectDigits({ max = 8, terminator = '#', timeoutMs = 10_000 } = {}): Promise<string | null> {
+    return new Promise(resolve => {
+      let digits = ''
+      const finish = (result: string | null) => {
+        clearTimeout(timer)
+        this.digitListener = null
+        this.stopDigits = null
+        resolve(result)
+      }
+      this.stopDigits = () => finish(digits || null)
+      const timer = setTimeout(() => finish(null), timeoutMs)
+      this.onClose(() => finish(null))
+      this.digitListener = digit => {
+        // Typing shouldn't be talked over by the prompt asking for it.
+        this.interrupt()
+        timer.refresh()
+        if (digit === terminator) return finish(digits)
+        digits += digit
+        if (digits.length >= max) finish(digits)
+      }
+    })
+  }
+
   listen(opts?: VadOptions): Promise<Buffer | null> {
     return new Promise(resolve => {
       const endpointer = new Endpointer(opts)
@@ -70,9 +104,11 @@ export class Call {
       const finish = (audio: Buffer | null) => {
         clearTimeout(stall)
         this.frameListener = null
+        this.stopListening = null
         this.lastListen = { frames: endpointer.frames, peakRms: Math.round(endpointer.peakRms) }
         resolve(audio)
       }
+      this.stopListening = () => finish(null)
       this.onClose(() => finish(null))
       this.frameListener = frame => {
         stall.refresh()
@@ -81,6 +117,27 @@ export class Call {
         else if (result.kind === 'silent') finish(null)
       }
     })
+  }
+
+  // Whichever comes first: keys, or speech. Typing produces no audio, so the
+  // keys keep their own timeout if speech times out first.
+  async speechOrKeys(
+    listen: VadOptions,
+    keys: { max?: number; terminator?: string },
+  ): Promise<{ keys: string } | { audio: Buffer } | null> {
+    const typed = this.collectDigits({ ...keys, timeoutMs: listen.noSpeechTimeoutMs })
+    const spoken = this.listen(listen)
+    const first = await Promise.race([typed.then(k => ({ k })), spoken.then(a => ({ a }))])
+    if ('k' in first && first.k) {
+      this.stopListening?.()
+      return { keys: first.k }
+    }
+    if ('a' in first && first.a) {
+      this.stopDigits?.()
+      return { audio: first.a }
+    }
+    const [k, a] = await Promise.all([typed, spoken])
+    return k ? { keys: k } : a ? { audio: a } : null
   }
 
   async hangup(): Promise<void> {

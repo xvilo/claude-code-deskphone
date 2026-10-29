@@ -41,7 +41,15 @@ openssl rand -hex 16   # ARI_PASSWORD: the daemon's Asterisk password
 
 Copy `ARI_PASSWORD` into `.env` as `DESKPHONE_ARI_PASSWORD`. You set `DESKPHONE_ARI_URL` in the next step, once you know where Asterisk runs.
 
-## 3. Pick a voice (optional)
+## 3. Set a PIN
+
+```sh
+npm run set-pin
+```
+
+While your Mac is locked, the phone asks for this PIN before it accepts prompts, approvals or answers. See [Usage](usage#locked-mac-and-pin).
+
+## 4. Pick a voice (optional)
 
 The daemon speaks with the macOS **system voice** unless `DESKPHONE_VOICE` is set. `say -v` can't select Siri voices by name, but if you choose a Siri voice under **System Settings → Accessibility → Spoken Content → System voice**, the daemon uses it. You can also download a Premium voice there (for example *Zoe (Premium)*) and set `DESKPHONE_VOICE="Zoe (Premium)"` in `.env`.
 

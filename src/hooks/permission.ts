@@ -16,13 +16,16 @@ try {
     body: JSON.stringify({ pid: findClaudePid(), tool_name: input.tool_name, tool_input: input.tool_input }),
     signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
   })
-  const { decision } = res.ok ? await res.json() : { decision: null }
+  const { decision, updatedInput } = res.ok ? await res.json() : { decision: null, updatedInput: undefined }
   if (decision === 'allow' || decision === 'deny') {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PermissionRequest',
-          decision: decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied over the phone.' },
+          decision:
+            decision === 'allow'
+              ? { behavior: 'allow', ...(updatedInput ? { updatedInput } : {}) }
+              : { behavior: 'deny', message: 'Denied over the phone.' },
         },
       }),
     )

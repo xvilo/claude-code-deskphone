@@ -10,6 +10,7 @@ const auth = `Basic ${Buffer.from(`${ARI_USER}:${ARI_PASSWORD}`).toString('base6
 export type AriEvent = {
   type: string
   args?: string[]
+  digit?: string
   channel?: { id: string; name: string; state: string }
 }
 

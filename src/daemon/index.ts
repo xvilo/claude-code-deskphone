@@ -3,7 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { basename } from 'node:path'
 import { Asterisk, type AriEvent } from './ari.ts'
 import { Call } from './call.ts'
+import { isScreenLocked } from './lock.ts'
 import { describePermission, parseDecision, type Decision } from './permission.ts'
+import { PinGuard } from './pin.ts'
+import { answerText, parseKeyedChoice, parseSpokenChoice, speakQuestion, type Choice, type Question } from './questions.ts'
 import { latestRecap } from './recap.ts'
 import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
 import { toSpeech } from './speech-text.ts'
@@ -18,6 +21,8 @@ const OUTBOUND_PREFIX = 'deskphone-out-'
 const registry = new Registry()
 const asterisk = new Asterisk(event => void onEvent(event))
 const beep = tone()
+const pins = new PinGuard()
+const PIN_ATTEMPTS = 3
 const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args)
 
 type OutboundCall = { answered: (call: Call) => Promise<void>; missed: () => void }
@@ -45,7 +50,47 @@ async function beepAndListen(call: Call, noSpeechTimeoutMs: number): Promise<Buf
   return call.listen({ noSpeechTimeoutMs })
 }
 
+// While this Mac is locked, prompts and approvals need the PIN, once per call.
+async function unlock(call: Call): Promise<boolean> {
+  if (call.authorized || !(await isScreenLocked())) return true
+  if (!(await pins.stored())) {
+    await say(call, 'This Mac is locked and has no PIN set.')
+    return false
+  }
+  for (let attempt = 0; attempt < PIN_ATTEMPTS && !call.closed; attempt++) {
+    if (pins.lockedOut()) break
+    const digits = call.collectDigits()
+    call.resume()
+    await say(call, attempt ? 'Try again, then press hash.' : 'This Mac is locked. Enter your PIN, then press hash.')
+    const entered = await digits
+    if (entered === null) break
+    const result = await pins.check(entered)
+    if (result === 'ok') {
+      log('PIN accepted')
+      call.authorized = true
+      call.resume()
+      await say(call, 'Thanks.')
+      return true
+    }
+    log(`PIN rejected (${result})`)
+    if (result !== 'wrong') break
+    call.resume()
+    await say(call, 'Wrong PIN.')
+  }
+  if (pins.lockedOut()) {
+    call.resume()
+    await say(call, 'Too many wrong PINs. Try again later.')
+  }
+  return false
+}
+
 async function captureAndDeliver(call: Call, session: Session, noSpeechTimeoutMs: number): Promise<boolean> {
+  if (!(await unlock(call))) {
+    call.resume()
+    await say(call, 'Okay, bye.')
+    await call.hangup()
+    return false
+  }
   const audio = await beepAndListen(call, noSpeechTimeoutMs)
   if (!audio) {
     const { frames, peakRms } = call.lastListen
@@ -187,11 +232,56 @@ function ring(session: Session, text: string): Promise<void> {
 
 // Asks by phone whether Claude may go ahead. null leaves the decision to the
 // prompt on screen: no answer, an unclear answer, or answered there first.
+// Claude's multiple-choice questions, one after another. null if any goes
+// unanswered, so the dialog stays on screen.
+function askQuestions(session: Session, questions: Question[], signal: AbortSignal): Promise<Record<string, string> | null> {
+  return callPhone<Record<string, string> | null>(
+    session,
+    async call => {
+      const intro = questions.length === 1 ? 'has a question.' : `has ${questions.length} questions.`
+      await say(call, `Extension ${session.ext}, ${basename(session.cwd)}, ${intro}`)
+      const answers: Record<string, string> = {}
+      for (const q of questions) {
+        call.resume()
+        await say(call, speakQuestion(q))
+        if (!(await unlock(call))) break
+        call.resume()
+        await call.play(beep)
+        const input = await call.speechOrKeys({ noSpeechTimeoutMs: REPLY_WAIT_MS }, q.multiSelect ? { terminator: '#', max: 9 } : { max: 1 })
+        let choice: Choice | null = null
+        if (input && 'keys' in input) choice = parseKeyedChoice(input.keys, q)
+        else if (input) choice = parseSpokenChoice(await transcribe(input.audio), q)
+        call.resume()
+        if (!choice) {
+          await say(call, "I'll leave it on screen.")
+          log(`ext ${session.ext}: question unanswered, left on screen`)
+          return null
+        }
+        answers[q.question] = answerText(choice, q)
+        await say(call, `Got it: ${answers[q.question]}.`)
+      }
+      if (Object.keys(answers).length < questions.length) return null
+      log(`ext ${session.ext}: answered ${questions.length} question(s) by phone`)
+      return answers
+    },
+    reason => {
+      log(`ext ${session.ext}: question call ${reason}, left on screen`)
+      return null
+    },
+    signal,
+  )
+}
+
 function askPermission(session: Session, request: string, signal: AbortSignal): Promise<Decision> {
   return callPhone<Decision>(
     session,
     async call => {
       await say(call, `Extension ${session.ext}, ${basename(session.cwd)}, needs permission to ${request}. Say yes to allow, or no to deny.`)
+      if (!(await unlock(call))) {
+        call.resume()
+        await say(call, "I'll leave it on screen.")
+        return null
+      }
       const audio = await beepAndListen(call, REPLY_WAIT_MS)
       const decision = audio ? parseDecision(await transcribe(audio)) : null
       await say(call, decision === 'allow' ? 'Allowed.' : decision === 'deny' ? 'Denied.' : "I'll leave it on screen.")
@@ -237,7 +327,7 @@ async function onEvent(event: AriEvent): Promise<void> {
     const [direction, arg] = event.args ?? []
     if (direction === 'inbound' || direction === 'outbound') await runCall(channel.id, direction, arg)
   } else if (event.type === 'ChannelDtmfReceived') {
-    calls.get(channel.id)?.interrupt()
+    if (event.digit) calls.get(channel.id)?.keypress(event.digit)
   } else if (event.type === 'StasisEnd' || event.type === 'ChannelDestroyed') {
     calls.get(channel.id)?.markClosed()
     if (event.type === 'ChannelDestroyed' && channel.id.startsWith(OUTBOUND_PREFIX)) {
@@ -289,6 +379,12 @@ const httpServer = createServer(async (req, res) => {
       // The hook process ends when the prompt is answered on screen; stop ringing then.
       const answeredElsewhere = new AbortController()
       res.on('close', () => answeredElsewhere.abort())
+      if (tool_name === 'AskUserQuestion' && Array.isArray(tool_input?.questions)) {
+        log(`ext ${session.ext}: asking ${tool_input.questions.length} question(s)`)
+        const answers = await askQuestions(session, tool_input.questions, answeredElsewhere.signal)
+        if (!answers) return send(res, 200, { decision: null })
+        return send(res, 200, { decision: 'allow', updatedInput: { ...tool_input, answers } })
+      }
       const request = describePermission(String(tool_name ?? ''), tool_input ?? {})
       log(`ext ${session.ext}: asking permission to ${request}`)
       const decision = await askPermission(session, request, answeredElsewhere.signal)
