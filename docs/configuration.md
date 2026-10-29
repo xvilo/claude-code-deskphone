@@ -47,4 +47,4 @@ The plugin's channel server and Stop hook find the daemon at `DESKPHONE_URL` (de
 | Dial | |
 | --- | --- |
 | `101#`–`199#` | A Claude session, in the order sessions register. A session asks for its previous extension back after a daemon restart. |
-| `100#` | Voicemail for all sessions. |
+| `100#` | Menu: **1** (or wait a few seconds) plays voicemail for all sessions, **2** reads out the registered sessions. |

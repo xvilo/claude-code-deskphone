@@ -11,7 +11,7 @@ Call your [Claude Code](https://claude.com/claude-code) sessions from a real ana
 - While your Mac is locked, a PIN is needed before the phone accepts input.
 - Press any key to cut Claude short and go straight to the beep.
 - Permission prompts ring the phone too: say yes or no.
-- Missed calls go to voicemail, signalled by a stutter dial tone. Dial `100#` to hear them.
+- Missed calls go to voicemail, signalled by a stutter dial tone. Dial `100#` to hear them, or press 2 there for a list of your sessions.
 - Dial a session with nothing waiting and it reads Claude Code's `※ recap`.
 
 ```

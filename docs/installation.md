@@ -57,6 +57,6 @@ Each reply is spoken in its own language. The daemon detects it with macOS's lan
 
 Short replies such as "Ja." or "OK, done." are hard to recognize. When the recognizer isn't sure, the daemon keeps to a language already in play: the session's last clearly detected reply language, then `DESKPHONE_LANGUAGE`, then any language with a `DESKPHONE_VOICE_<LANG>` setting, then `DESKPHONE_VOICE_LANGUAGE`. If you often get short replies in a second language, setting `DESKPHONE_VOICE_<LANG>` for it helps from the first reply on.
 
-The words the daemon adds around a reply follow the reply's language too: "(code on screen)", "a link to …", "the rest is on screen", the "Extension 101" and "Recap" or "Last time" prefixes, and the instructions after a question from Claude. They exist in English and Dutch; other languages get the English wording. Menu prompts such as the PIN and voicemail announcements stay in English.
+The words the daemon adds around a reply follow the reply's language too: "(code on screen)", "a link to …", "the rest is on screen", the "Extension 101" and "Recap" or "Last time" prefixes, and the instructions after a question from Claude. They exist in English and Dutch; other languages get the English wording. Menu prompts such as the PIN, the `100#` menu and the voicemail announcements stay in English.
 
 Next: [run Asterisk](asterisk).

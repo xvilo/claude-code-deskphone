@@ -30,7 +30,7 @@ Speech is transcribed by whisper.cpp, so expect the odd misheard word. Claude is
 
 ## Skipping ahead
 
-Press any key (for example `*` or `0`) while Claude is talking to cut it short and jump straight to the beep. This works for greetings, recaps, callbacks, permission questions and voicemail. On `100#`, a keypress skips to the reply beep for the current message, and the next message plays after that.
+Press any key (for example `*` or `0`) while Claude is talking to cut it short and jump straight to the beep. This works for greetings, recaps, callbacks, permission questions and voicemail. While `100#` plays messages, a keypress skips to the reply beep for the current message, and the next message plays after that.
 
 The ATA must send keypresses as RFC 2833 / RFC 4733 events, the HT801's default ("DTMF via RFC2833").
 
@@ -90,10 +90,13 @@ It's stored as a salted scrypt hash in `~/.config/deskphone/pin`, readable only 
 While replies are waiting, lifting the handset gives a **stutter dial tone** instead of the steady one.
 
 - Dial a session's extension to hear that session's waiting replies, then answer it.
-- Dial **`100#`** to hear every waiting reply across all sessions, oldest first. Each one is announced with its extension and folder and followed by a beep. Answer it, or stay silent to skip to the next.
+- Dial **`100#`** for the menu: "Press 1 for messages, 2 for sessions."
+  - Press **1**, or nothing at all, to hear every waiting reply across all sessions, oldest first. Each one is announced with its extension and folder and followed by a beep. Answer it, or stay silent to skip to the next.
+  - Press **2** to hear the registered sessions instead, see [Several sessions](#several-sessions).
+  - Any other key repeats the menu once.
 
 Voicemail is saved to `~/.config/deskphone/voicemail.json`, so it survives a daemon restart. When a session reconnects, its messages go back to its extension. Messages from a session that doesn't come back can still be heard on `100#`, but there is no beep to answer them.
 
 ## Several sessions
 
-Each session that runs `/deskphone:phone` gets its own extension. Callbacks from different sessions queue up, since the phone has one line. Run `curl localhost:7788/status` to see the registered sessions and how many messages each has waiting. When a session's Claude Code process exits, the daemon frees its extension within half a minute. Any waiting messages from it stay on `100#`.
+Each session that runs `/deskphone:phone` gets its own extension. Callbacks from different sessions queue up, since the phone has one line. Dial `100#` and press **2** to hear the registered sessions: each extension with its folder, whether Claude Code is connected to it, and how many messages it has waiting. `curl localhost:7788/status` shows the same on screen. When a session's Claude Code process exits, the daemon frees its extension within half a minute. Any waiting messages from it stay on `100#`.
