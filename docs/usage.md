@@ -94,4 +94,4 @@ Voicemail is saved to `~/.config/deskphone/voicemail.json`, so it survives a dae
 
 ## Several sessions
 
-Each session that runs `/deskphone:phone` gets its own extension. Callbacks from different sessions queue up, since the phone has one line. Run `curl localhost:7788/status` to see the registered sessions and how many messages each has waiting.
+Each session that runs `/deskphone:phone` gets its own extension. Callbacks from different sessions queue up, since the phone has one line. Run `curl localhost:7788/status` to see the registered sessions and how many messages each has waiting. When a session's Claude Code process exits, the daemon frees its extension within half a minute. Any waiting messages from it stay on `100#`.

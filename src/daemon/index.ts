@@ -116,7 +116,23 @@ function voicemailChanged(): void {
   voicemailStore.save(registry.snapshot()).catch(err => log('saving voicemail failed:', (err as Error).message))
 }
 
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+function pruneSessions(): void {
+  const dead = registry.prune(isAlive)
+  for (const session of dead) log(`ext ${session.ext}: pid ${session.pid} exited, unregistered`)
+  if (dead.length) voicemailChanged()
+}
+
 async function handleInbound(call: Call, ext: number): Promise<void> {
+  pruneSessions()
   if (ext === VOICEMAIL_EXT) return playVoicemail(call)
   const session = registry.byExt(ext)
   if (!session) {
@@ -363,6 +379,7 @@ const httpServer = createServer(async (req, res) => {
   try {
     if (req.method === 'POST' && url.pathname === '/register') {
       const { pid, cwd, ext } = await readJson(req)
+      pruneSessions()
       const session = registry.register(Number(pid), String(cwd ?? ''), ext ? Number(ext) : undefined)
       log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})`)
       return send(res, 200, { ext: session.ext })
@@ -431,5 +448,6 @@ const httpServer = createServer(async (req, res) => {
 
 registry.restore(await voicemailStore.load())
 if (registry.voicemailCount()) log(`restored ${registry.voicemailCount()} voicemail message(s)`)
+setInterval(pruneSessions, 30_000).unref()
 httpServer.listen(HTTP_PORT, '127.0.0.1', () => log(`control API on http://127.0.0.1:${HTTP_PORT}`))
 void asterisk.connect(log, voicemailChanged)

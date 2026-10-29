@@ -72,3 +72,14 @@ test('voicemail from sessions that never return stays playable', () => {
   assert.equal(after.takeOldestVoicemail(), null)
   assert.deepEqual(after.snapshot(), [])
 })
+
+test('prunes sessions whose process exited and keeps their voicemail', () => {
+  const registry = new Registry()
+  const gone = registry.register(1, '/a', 103)
+  registry.register(2, '/b')
+  registry.leaveVoicemail(gone, 'missed', 'en', 1)
+  assert.deepEqual(registry.prune(pid => pid !== 1).map(s => s.pid), [1])
+  assert.equal(registry.byExt(103), undefined)
+  assert.equal(registry.register(3, '/c', 103).ext, 103)
+  assert.equal(registry.takeOldestVoicemail()?.message.text, 'missed')
+})

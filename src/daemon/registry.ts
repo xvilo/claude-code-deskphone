@@ -53,6 +53,17 @@ export class Registry {
     return this.byPid.delete(pid)
   }
 
+  // Drops sessions whose Claude process has exited, freeing their extension.
+  // Their voicemail stays playable on the voicemail extension.
+  prune(isAlive: (pid: number) => boolean): Session[] {
+    const dead = [...this.byPid.values()].filter(s => !isAlive(s.pid))
+    for (const session of dead) {
+      this.byPid.delete(session.pid)
+      if (session.voicemail.length) this.orphans.push(session)
+    }
+    return dead
+  }
+
   get(pid: number): Session | undefined {
     return this.byPid.get(pid)
   }
