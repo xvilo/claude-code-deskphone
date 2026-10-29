@@ -1,5 +1,6 @@
 export type PhoneEvent = { type: 'prompt'; text: string; ext: number }
 export type Voicemail = { text: string; at: number; lang: string }
+export type SavedVoicemail = { pid: number; ext: number; cwd: string; voicemail: Voicemail[] }
 
 export type Session = {
   pid: number
@@ -19,14 +20,33 @@ export const LAST_EXT = 199
 
 export class Registry {
   private byPid = new Map<number, Session>()
+  // Restored from disk for sessions that haven't re-registered since the restart.
+  private orphans: Session[] = []
 
   register(pid: number, cwd: string, preferredExt?: number): Session {
     const existing = this.byPid.get(pid)
     if (existing) return existing
+    // cwd guards against a reused pid after a reboot.
+    const orphan = this.orphans.findIndex(o => o.pid === pid && o.cwd === cwd)
+    const voicemail = orphan === -1 ? [] : this.orphans.splice(orphan, 1)[0].voicemail
     const ext = this.allocate(preferredExt)
-    const session: Session = { pid, ext, cwd, voicemail: [], lastReply: null, transcriptPath: null, language: null, outbox: [], listener: null }
+    const session = newSession(pid, ext, cwd, voicemail)
     this.byPid.set(pid, session)
     return session
+  }
+
+  restore(saved: SavedVoicemail[]): void {
+    for (const { pid, ext, cwd, voicemail } of saved) {
+      if (voicemail?.length) this.orphans.push(newSession(pid, ext, cwd, voicemail))
+    }
+  }
+
+  snapshot(): SavedVoicemail[] {
+    return this.withVoicemail().map(({ pid, ext, cwd, voicemail }) => ({ pid, ext, cwd, voicemail }))
+  }
+
+  isLive(session: Session): boolean {
+    return this.byPid.get(session.pid) === session
   }
 
   unregister(pid: number): boolean {
@@ -51,14 +71,16 @@ export class Registry {
   }
 
   voicemailCount(): number {
-    return this.list().reduce((n, s) => n + s.voicemail.length, 0)
+    return this.withVoicemail().reduce((n, s) => n + s.voicemail.length, 0)
   }
 
-  // Removes and returns the oldest message across all sessions.
+  // Removes and returns the oldest message across all sessions, including
+  // ones whose session never came back after a restart.
   takeOldestVoicemail(): { session: Session; message: Voicemail } | null {
+    this.orphans = this.orphans.filter(o => o.voicemail.length)
     let oldest: Session | null = null
-    for (const session of this.byPid.values()) {
-      if (session.voicemail.length && (!oldest || session.voicemail[0].at < oldest.voicemail[0].at)) oldest = session
+    for (const session of this.withVoicemail()) {
+      if (!oldest || session.voicemail[0].at < oldest.voicemail[0].at) oldest = session
     }
     return oldest ? { session: oldest, message: oldest.voicemail.shift()! } : null
   }
@@ -77,10 +99,18 @@ export class Registry {
     }
   }
 
+  private withVoicemail(): Session[] {
+    return [...this.byPid.values(), ...this.orphans].filter(s => s.voicemail.length)
+  }
+
   private allocate(preferred?: number): number {
     const taken = new Set([...this.byPid.values()].map(s => s.ext))
     if (preferred && preferred >= FIRST_EXT && preferred <= LAST_EXT && !taken.has(preferred)) return preferred
     for (let ext = FIRST_EXT; ext <= LAST_EXT; ext++) if (!taken.has(ext)) return ext
     throw new Error('all extensions are in use')
   }
+}
+
+function newSession(pid: number, ext: number, cwd: string, voicemail: Voicemail[]): Session {
+  return { pid, ext, cwd, voicemail, lastReply: null, transcriptPath: null, language: null, outbox: [], listener: null }
 }

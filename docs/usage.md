@@ -90,7 +90,7 @@ While replies are waiting, lifting the handset gives a **stutter dial tone** ins
 - Dial a session's extension to hear that session's waiting replies, then answer it.
 - Dial **`100#`** to hear every waiting reply across all sessions, oldest first. Each one is announced with its extension and folder and followed by a beep. Answer it, or stay silent to skip to the next.
 
-Voicemail lives in the daemon's memory, so restarting the daemon clears it.
+Voicemail is saved to `~/.config/deskphone/voicemail.json`, so it survives a daemon restart. When a session reconnects, its messages go back to its extension. Messages from a session that doesn't come back can still be heard on `100#`, but there is no beep to answer them.
 
 ## Several sessions
 
