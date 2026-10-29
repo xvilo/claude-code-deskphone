@@ -10,6 +10,8 @@ export type ListenStats = { frames: number; peakRms: number }
 
 export class Call {
   closed = false
+  // Set by a keypress: speech is skipped until the next beep.
+  skipping = false
   lastListen: ListenStats = { frames: 0, peakRms: 0 }
   readonly started: Promise<void>
   private frameListener: ((frame: Buffer) => void) | null = null
@@ -39,7 +41,7 @@ export class Call {
   async play(pcm: Buffer): Promise<void> {
     await this.started
     const start = Date.now()
-    for (let offset = 0, i = 0; offset < pcm.length && !this.closed; offset += FRAME_BYTES, i++) {
+    for (let offset = 0, i = 0; offset < pcm.length && !this.closed && !this.skipping; offset += FRAME_BYTES, i++) {
       const frame = Buffer.alloc(FRAME_BYTES)
       pcm.copy(frame, 0, offset, offset + FRAME_BYTES)
       this.ws?.send(frame)
@@ -48,6 +50,17 @@ export class Call {
       const wait = start + (i + 1) * FRAME_INTERVAL_MS - Date.now()
       if (wait > 0) await new Promise(r => setTimeout(r, wait))
     }
+  }
+
+  interrupt(): void {
+    if (this.skipping || this.closed) return
+    this.skipping = true
+    // Drops what Asterisk has queued but not yet played.
+    this.ws?.send('FLUSH_MEDIA')
+  }
+
+  resume(): void {
+    this.skipping = false
   }
 
   listen(opts?: VadOptions): Promise<Buffer | null> {

@@ -34,12 +34,19 @@ function onLine<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function say(call: Call, text: string): Promise<void> {
-  if (!call.closed) await call.play(await synthesize(text))
+  if (call.closed || call.skipping) return
+  await call.play(await synthesize(text))
+}
+
+// The beep always plays, even right after a keypress cut the speech short.
+async function beepAndListen(call: Call, noSpeechTimeoutMs: number): Promise<Buffer | null> {
+  call.resume()
+  await call.play(beep)
+  return call.listen({ noSpeechTimeoutMs })
 }
 
 async function captureAndDeliver(call: Call, session: Session, noSpeechTimeoutMs: number): Promise<boolean> {
-  await call.play(beep)
-  const audio = await call.listen({ noSpeechTimeoutMs })
+  const audio = await beepAndListen(call, noSpeechTimeoutMs)
   if (!audio) {
     const { frames, peakRms } = call.lastListen
     log(`ext ${session.ext} heard nothing: ${frames} audio frames, peak level ${peakRms} (threshold ${process.env.DESKPHONE_VAD_THRESHOLD ?? 500})${call.closed ? ', caller hung up' : ''}`)
@@ -68,7 +75,7 @@ async function handleInbound(call: Call, ext: number): Promise<void> {
     return
   }
   if (session.voicemail.length) {
-    while (session.voicemail.length && !call.closed) {
+    while (session.voicemail.length && !call.closed && !call.skipping) {
       const message = session.voicemail.shift()!
       await say(call, message.text)
       if (call.closed) session.voicemail.unshift(message)
@@ -185,8 +192,7 @@ function askPermission(session: Session, request: string, signal: AbortSignal): 
     session,
     async call => {
       await say(call, `Extension ${session.ext}, ${basename(session.cwd)}, needs permission to ${request}. Say yes to allow, or no to deny.`)
-      await call.play(beep)
-      const audio = await call.listen({ noSpeechTimeoutMs: REPLY_WAIT_MS })
+      const audio = await beepAndListen(call, REPLY_WAIT_MS)
       const decision = audio ? parseDecision(await transcribe(audio)) : null
       await say(call, decision === 'allow' ? 'Allowed.' : decision === 'deny' ? 'Denied.' : "I'll leave it on screen.")
       log(`ext ${session.ext}: permission to ${request}: ${decision ?? 'no decision'}`)
@@ -230,6 +236,8 @@ async function onEvent(event: AriEvent): Promise<void> {
     // The media channels this daemon creates also enter the app, without args.
     const [direction, arg] = event.args ?? []
     if (direction === 'inbound' || direction === 'outbound') await runCall(channel.id, direction, arg)
+  } else if (event.type === 'ChannelDtmfReceived') {
+    calls.get(channel.id)?.interrupt()
   } else if (event.type === 'StasisEnd' || event.type === 'ChannelDestroyed') {
     calls.get(channel.id)?.markClosed()
     if (event.type === 'ChannelDestroyed' && channel.id.startsWith(OUTBOUND_PREFIX)) {

@@ -28,6 +28,12 @@ Lift the handset and dial the extension followed by `#`, for example `101#`.
 
 Speech is transcribed by whisper.cpp, so expect the odd misheard word. Claude is told the text is spoken input and to read it generously.
 
+## Skipping ahead
+
+Press any key (for example `*` or `0`) while Claude is talking to cut it short and jump straight to the beep. This works for greetings, recaps, callbacks, permission questions and voicemail. On `100#`, a keypress skips to the reply beep for the current message, and the next message plays after that.
+
+The ATA must send keypresses as RFC 2833 / RFC 4733 events, the HT801's default ("DTMF via RFC2833").
+
 ## Callbacks
 
 When a phone-enabled session finishes a turn, the phone rings.
