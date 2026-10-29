@@ -12,6 +12,7 @@ services:
       SIP_PORT: "5060"
       PHONE_PASSWORD: ${PHONE_PASSWORD:?set PHONE_PASSWORD in asterisk/.env}
       ARI_PASSWORD: ${ARI_PASSWORD:?set ARI_PASSWORD in asterisk/.env}
+      SOFTPHONE_PASSWORD: ${SOFTPHONE_PASSWORD:-}
     volumes:
       - ./config:/deskphone:ro
       - ./render.sh:/render.sh:ro

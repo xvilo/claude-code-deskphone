@@ -10,6 +10,7 @@ export type Session = {
   lastReply: Voicemail | null
   transcriptPath: string | null
   language: string | null
+  phone: string | null
   outbox: PhoneEvent[]
   listener: ((event: PhoneEvent) => void) | null
 }
@@ -123,5 +124,5 @@ export class Registry {
 }
 
 function newSession(pid: number, ext: number, cwd: string, voicemail: Voicemail[]): Session {
-  return { pid, ext, cwd, voicemail, lastReply: null, transcriptPath: null, language: null, outbox: [], listener: null }
+  return { pid, ext, cwd, voicemail, lastReply: null, transcriptPath: null, language: null, phone: null, outbox: [], listener: null }
 }

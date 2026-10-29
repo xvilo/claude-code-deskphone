@@ -14,7 +14,8 @@ nav_order: 7
 | `DESKPHONE_ARI_URL` | `http://127.0.0.1:8088/ari` | Comma-separated ARI base URLs, tried in order. The daemon holds the first that answers and starts over from the top if it drops. |
 | `DESKPHONE_ARI_USER` | `deskphone` | |
 | `DESKPHONE_ARI_PASSWORD` | `deskphone` | Must match `ARI_PASSWORD` in `asterisk/.env`. |
-| `DESKPHONE_ENDPOINT` | `PJSIP/phone` | What callbacks dial. |
+| `DESKPHONE_ENDPOINT` | `PJSIP/phone` | What callbacks dial until a phone has called in, or always with `DESKPHONE_FOLLOW_LAST_PHONE=false`. |
+| `DESKPHONE_FOLLOW_LAST_PHONE` | `true` | Ring the phone that last dialed in, unless the session is pinned to one. |
 | `DESKPHONE_VOICE` | system voice | `say -v` voice name. |
 | `DESKPHONE_VOICE_LANGUAGE` | `en` | Language of `DESKPHONE_VOICE`. Replies detected in another language use an installed voice for that language instead. |
 | `DESKPHONE_VOICE_<LANG>` | best installed | Voice for one language, e.g. `DESKPHONE_VOICE_NL="Xander"`. Short replies that can't be recognized clearly also lean toward that language. |
@@ -36,6 +37,7 @@ The plugin's channel server and Stop hook find the daemon at `DESKPHONE_URL` (de
 | Variable | |
 | --- | --- |
 | `PHONE_PASSWORD` | SIP password of the `phone` account, which the ATA uses. |
+| `SOFTPHONE_PASSWORD` | Optional. SIP password of the `softphone` account. Unset, the account gets a random password. |
 | `ARI_PASSWORD` | Password of the `deskphone` ARI user, which the daemon uses. |
 
 `EXTERNAL_IP` (the address or hostname advertised to phones) and `SIP_PORT` are set in `docker-compose.yml` and `kubernetes/deployment.yaml`.

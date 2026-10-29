@@ -52,7 +52,7 @@ Click **Save and Apply**. A plain "Save" stores the values without activating th
 
 The short registration expiry matters because the ATA's address changes whenever the Mac changes network. With two minutes, it recovers by itself.
 
-Only one device can be registered as `phone` at a time. If you tested with a softphone (Telephone.app, Linphone) using the same account, turn that off, or the two keep pushing each other out.
+Only one device can be registered per account. A softphone on the laptop (Telephone.app, Linphone) gets its own account, `softphone`, with the password `SOFTPHONE_PASSWORD` from `asterisk/.env`. If both devices use `phone`, they keep pushing each other out and callbacks land on whichever registered last.
 
 ## Ringer volume
 
