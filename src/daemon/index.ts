@@ -15,7 +15,7 @@ import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
 import { VoicemailStore } from './voicemail-store.ts'
 import { PhoneRouter, toEndpoint } from './phones.ts'
-import { DeviceStore, STATIC_DEVICES } from './devices.ts'
+import { DESK_PHONE, DeviceStore } from './devices.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
@@ -136,8 +136,9 @@ function pruneSessions(): void {
 }
 
 async function pushDevices(): Promise<void> {
+  await asterisk.setNumber(DESK_PHONE.number, DESK_PHONE.name).catch(err => log(`numbering ${DESK_PHONE.name} failed:`, (err as Error).message))
   for (const device of devices.list()) {
-    await asterisk.addDevice(device.name, device.password).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
+    await asterisk.addDevice(device.name, device.password, device.number).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
   }
 }
 
@@ -404,21 +405,23 @@ const httpServer = createServer(async (req, res) => {
       return send(res, 200, { ext: session.ext, phone: session.phone })
     }
     if (req.method === 'GET' && url.pathname === '/phones') {
-      const names = [...STATIC_DEVICES, ...devices.list().map(d => d.name)]
-      const phones = await Promise.all(names.map(async name => ({ name, state: await asterisk.deviceState(name), static: STATIC_DEVICES.includes(name) })))
+      const all = [DESK_PHONE, ...devices.list()]
+      const phones = await Promise.all(all.map(async ({ name, number }) => ({ name, number, state: await asterisk.deviceState(name), static: name === DESK_PHONE.name })))
       return send(res, 200, { phones, server: asterisk.active ? new URL(asterisk.active).hostname : null })
     }
     if (req.method === 'POST' && url.pathname === '/phones') {
       const device = await devices.add(String((await readJson(req)).name ?? ''))
-      await asterisk.addDevice(device.name, device.password).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
-      log(`added phone ${device.name}`)
+      await asterisk.addDevice(device.name, device.password, device.number).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
+      log(`added phone ${device.name} as ${device.number}`)
       return send(res, 200, { ...device, username: device.name, server: asterisk.active ? new URL(asterisk.active).hostname : null })
     }
     if (req.method === 'POST' && url.pathname === '/phones/remove') {
       const name = String((await readJson(req)).name ?? '')
+      const number = devices.list().find(d => d.name === name)?.number
       const removed = await devices.remove(name)
       if (removed) {
         await asterisk.removeDevice(name)
+        if (number) await asterisk.setNumber(number, null).catch(() => {})
         log(`removed phone ${name}`)
       }
       return send(res, 200, { removed })

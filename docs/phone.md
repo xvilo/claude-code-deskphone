@@ -56,10 +56,12 @@ Only one device can be registered per account. If a softphone also uses `phone`,
 
 ## More phones
 
-The desk phone's `phone` account lives in `pjsip.conf`. To add another phone, such as a softphone on the laptop (Telephone.app, Linphone), ask Claude in any phone-enabled session to "add a phone called softphone". Claude replies with a SIP username, password and server. Enter them in the softphone, using the same port as the desk phone.
+The desk phone's `phone` account lives in `pjsip.conf`. To add another phone, such as a softphone on the laptop (Telephone.app, Linphone), ask Claude in any phone-enabled session to "add a phone called softphone". Claude replies with a SIP username, password and server, and the phone's number. Enter the account details in the softphone, using the same port as the desk phone.
 
-- "List my phones" shows each account and whether it's registered.
+- "List my phones" shows each account, its number and whether it's registered.
 - "Remove the phone called softphone" deletes it.
+
+Phones can call each other. The desk phone is **1001**, and each added phone gets the next free number from **1002**. Dial the number (with `#` on the desk phone) and the other phone rings; the caller shows up as the account name and number. Numbers are published to Asterisk by the daemon, so phone-to-phone calls need the daemon running, like everything else.
 
 The daemon keeps these accounts in `~/.config/deskphone/phones.json` and adds them to Asterisk over ARI each time it connects. Asterisk holds them in memory only, so they don't need a redeploy and come back after an Asterisk restart. With a public and a local Asterisk, only the one the daemon is connected to has them.
 

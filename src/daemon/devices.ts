@@ -3,16 +3,19 @@ import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-export type Device = { name: string; password: string }
+export type Device = { name: string; password: string; number: number }
 
 export const DEVICES_FILE = process.env.DESKPHONE_PHONES_FILE ?? join(homedir(), '.config', 'deskphone', 'phones.json')
-// Accounts in asterisk/config/pjsip.conf; Asterisk refuses to change them over ARI.
-export const STATIC_DEVICES = ['phone']
+// The account in asterisk/config/pjsip.conf; Asterisk refuses to change it over ARI.
+export const DESK_PHONE = { name: 'phone', number: 1001 }
+// Phones call each other on these; sessions are 101-199 and voicemail 100.
+export const FIRST_NUMBER = 1002
+export const LAST_NUMBER = 1999
 const NAME = /^[a-z][a-z0-9_]{0,31}$/
 
 export function checkName(name: string): string | null {
   if (!NAME.test(name)) return 'use lowercase letters, digits and underscores, starting with a letter'
-  if (STATIC_DEVICES.includes(name)) return `${name} is defined in pjsip.conf`
+  if (name === DESK_PHONE.name) return `${name} is defined in pjsip.conf`
   return null
 }
 
@@ -31,6 +34,10 @@ export class DeviceStore {
     } catch {
       this.devices = []
     }
+    // Phones saved before they had numbers.
+    const unnumbered = this.devices.filter(d => !d.number)
+    for (const device of unnumbered) device.number = this.freeNumber()
+    if (unnumbered.length) await this.save()
     return this.list()
   }
 
@@ -42,7 +49,7 @@ export class DeviceStore {
     const problem = checkName(name)
     if (problem) throw new Error(problem)
     if (this.devices.some(d => d.name === name)) throw new Error(`${name} already exists`)
-    const device = { name, password: randomBytes(12).toString('hex') }
+    const device = { name, password: randomBytes(12).toString('hex'), number: this.freeNumber() }
     this.devices.push(device)
     await this.save()
     return device
@@ -54,6 +61,12 @@ export class DeviceStore {
     if (this.devices.length === before) return false
     await this.save()
     return true
+  }
+
+  private freeNumber(): number {
+    const taken = new Set(this.devices.map(d => d.number))
+    for (let number = FIRST_NUMBER; number <= LAST_NUMBER; number++) if (!taken.has(number)) return number
+    throw new Error('no phone numbers left')
   }
 
   private async save(): Promise<void> {
