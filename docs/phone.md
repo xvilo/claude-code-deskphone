@@ -52,7 +52,16 @@ Click **Save and Apply**. A plain "Save" stores the values without activating th
 
 The short registration expiry matters because the ATA's address changes whenever the Mac changes network. With two minutes, it recovers by itself.
 
-Only one device can be registered per account. A softphone on the laptop (Telephone.app, Linphone) gets its own account, `softphone`, with the password `SOFTPHONE_PASSWORD` from `asterisk/.env`. If both devices use `phone`, they keep pushing each other out and callbacks land on whichever registered last.
+Only one device can be registered per account. If a softphone also uses `phone`, the two keep pushing each other out, and callbacks land on whichever registered last. Give it its own account instead.
+
+## More phones
+
+The desk phone's `phone` account lives in `pjsip.conf`. To add another phone, such as a softphone on the laptop (Telephone.app, Linphone), ask Claude in any phone-enabled session to "add a phone called softphone". Claude replies with a SIP username, password and server. Enter them in the softphone, using the same port as the desk phone.
+
+- "List my phones" shows each account and whether it's registered.
+- "Remove the phone called softphone" deletes it.
+
+The daemon keeps these accounts in `~/.config/deskphone/phones.json` and adds them to Asterisk over ARI each time it connects. Asterisk holds them in memory only, so they don't need a redeploy and come back after an Asterisk restart. With a public and a local Asterisk, only the one the daemon is connected to has them.
 
 ## Ringer volume
 

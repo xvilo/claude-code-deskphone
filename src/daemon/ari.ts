@@ -13,6 +13,35 @@ export type AriEvent = {
   channel?: { id: string; name: string; state: string }
 }
 
+// Mirrors the [device] and [device-aor] templates in asterisk/config/pjsip.conf,
+// which objects created over ARI can't inherit from.
+const DEVICE_ENDPOINT = {
+  transport: 'transport-udp',
+  context: 'from-phone',
+  disallow: 'all',
+  allow: 'ulaw,alaw',
+  direct_media: 'no',
+  rtp_symmetric: 'yes',
+  force_rport: 'yes',
+  rewrite_contact: 'yes',
+  dtmf_mode: 'rfc4733',
+  rtp_timeout: '30',
+}
+const DEVICE_AOR = {
+  max_contacts: '1',
+  remove_existing: 'yes',
+  qualify_frequency: '30',
+  default_expiration: '120',
+  maximum_expiration: '120',
+  minimum_expiration: '60',
+}
+
+const DYNAMIC_PJSIP = '/asterisk/config/dynamic/res_pjsip'
+
+function fields(values: Record<string, string>): { fields: { attribute: string; value: string }[] } {
+  return { fields: Object.entries(values).map(([attribute, value]) => ({ attribute, value })) }
+}
+
 function toWebSocketUrl(base: string): string {
   return base.replace(/^http/, 'ws')
 }
@@ -110,6 +139,22 @@ export class Asterisk {
   // never answered and so never enters the app.
   async setMessageWaiting(count: number): Promise<void> {
     await this.request('POST', '/channels', { endpoint: `Local/${count}@deskphone-mwi`, app: APP, timeout: '5' }).catch(() => {})
+  }
+
+  // Asterisk keeps these in memory only (see sorcery.conf), so the daemon
+  // pushes every device again each time it connects.
+  async addDevice(name: string, password: string): Promise<void> {
+    await this.request('PUT', `${DYNAMIC_PJSIP}/auth/${name}`, undefined, fields({ auth_type: 'userpass', username: name, password }))
+    await this.request('PUT', `${DYNAMIC_PJSIP}/aor/${name}`, undefined, fields(DEVICE_AOR))
+    await this.request('PUT', `${DYNAMIC_PJSIP}/endpoint/${name}`, undefined, fields({ ...DEVICE_ENDPOINT, auth: name, aors: name }))
+  }
+
+  async removeDevice(name: string): Promise<void> {
+    for (const type of ['endpoint', 'aor', 'auth']) await this.request('DELETE', `${DYNAMIC_PJSIP}/${type}/${name}`).catch(() => {})
+  }
+
+  async deviceState(name: string): Promise<string> {
+    return (await this.request('GET', `/endpoints/PJSIP/${name}`).catch(() => null))?.state ?? 'unknown'
   }
 
   async originate(endpoint: string, channelId: string, ext: number, callId: string, ringSeconds: number): Promise<void> {

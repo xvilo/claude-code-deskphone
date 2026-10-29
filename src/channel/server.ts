@@ -86,6 +86,25 @@ const tools = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'phone_device_add',
+    description: 'Create a SIP account for another phone, such as a softphone on the laptop. Returns the username, password and server to enter in that phone.',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Account name: lowercase letters, digits and underscores, e.g. "softphone" or "laptop"' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'phone_device_remove',
+    description: 'Delete a SIP account created with phone_device_add.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+  },
+  {
+    name: 'phone_device_list',
+    description: 'List the phones (SIP accounts) and whether each is registered.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'phone_status',
     description: 'List phone-enabled sessions and their extensions.',
     inputSchema: { type: 'object', properties: {} },
@@ -116,6 +135,23 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         ext = null
         await daemon('/unregister', { pid })
         return text('Phone disabled for this session.')
+      }
+      case 'phone_device_add': {
+        const { name } = req.params.arguments as { name: string }
+        const device = await daemon('/phones', { name })
+        return text(
+          `Created phone "${device.name}". SIP username: ${device.username}, password: ${device.password}, server: ${device.server ?? 'your Asterisk'} (same port as the desk phone). ` +
+            'Calls ring the phone used last; pin a session to it with phone_register phone="' + device.name + '".',
+        )
+      }
+      case 'phone_device_remove': {
+        const { name } = req.params.arguments as { name: string }
+        const { removed } = await daemon('/phones/remove', { name })
+        return text(removed ? `Removed phone "${name}".` : `There is no added phone called "${name}".`)
+      }
+      case 'phone_device_list': {
+        const res = await fetch(`${DAEMON_URL}/phones`)
+        return text(JSON.stringify(await res.json(), null, 2))
       }
       case 'phone_status': {
         const res = await fetch(`${DAEMON_URL}/status`)

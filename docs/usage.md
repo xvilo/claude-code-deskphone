@@ -41,7 +41,7 @@ When a phone-enabled session finishes a turn, the phone rings.
 - **Answer:** Claude reads its reply (markdown, code blocks and long paths are stripped, and very long replies are cut off with "the rest is on screen", or "de rest staat op het scherm" for a Dutch reply). After the beep, speak your next prompt, or stay silent and it hangs up.
 - **Don't answer:** the reply goes to voicemail.
 
-Callbacks ring the phone you last dialed from, so with a desk phone and a softphone the reply comes back to where you are. Before your first call after a daemon restart, they ring `DESKPHONE_ENDPOINT`. To always ring one device for a session, name it when you set it up, for example `/deskphone:phone softphone` or "give this chat a phone number on the desk phone".
+Callbacks ring the phone you last dialed from, so with a desk phone and a softphone the reply comes back to where you are. Before your first call after a daemon restart, they ring `DESKPHONE_ENDPOINT`. To always ring one device for a session, name it when you set it up, for example `/deskphone:phone softphone` or "give this chat a phone number on the desk phone". To add phones, see [More phones](phone#more-phones).
 
 Callbacks wait until the line is free. If Claude answers while you're still on the call that asked the question, the phone rings right after you hang up.
 
