@@ -53,4 +53,6 @@ While your Mac is locked, the phone asks for this PIN before it accepts prompts,
 
 The daemon speaks with the macOS **system voice** unless `DESKPHONE_VOICE` is set. `say -v` can't select Siri voices by name, but if you choose a Siri voice under **System Settings → Accessibility → Spoken Content → System voice**, the daemon uses it. You can also download a Premium voice there (for example *Zoe (Premium)*) and set `DESKPHONE_VOICE="Zoe (Premium)"` in `.env`.
 
+Each reply is spoken in its own language. The daemon detects it with macOS's language recognizer. When the reply isn't in `DESKPHONE_VOICE_LANGUAGE` (default `en`), the daemon picks an installed voice for that language. It prefers the home locale (`nl_NL` over `nl_BE`) and Premium or Enhanced voices, so downloading one, for example *Xander (Enhanced)*, is enough. To choose one yourself, set `DESKPHONE_VOICE_NL="Xander (Enhanced)"`. To use a Siri voice for your main language, make it the system voice and set `DESKPHONE_VOICE_LANGUAGE` to that language.
+
 Next: [run Asterisk](asterisk).

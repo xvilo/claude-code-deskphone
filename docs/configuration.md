@@ -16,6 +16,8 @@ nav_order: 7
 | `DESKPHONE_ARI_PASSWORD` | `deskphone` | Must match `ARI_PASSWORD` in `asterisk/.env`. |
 | `DESKPHONE_ENDPOINT` | `PJSIP/phone` | What callbacks dial. |
 | `DESKPHONE_VOICE` | system voice | `say -v` voice name. |
+| `DESKPHONE_VOICE_LANGUAGE` | `en` | Language of `DESKPHONE_VOICE`. Replies detected in another language use an installed voice for that language instead. |
+| `DESKPHONE_VOICE_<LANG>` | best installed | Voice for one language, e.g. `DESKPHONE_VOICE_NL="Xander"`. |
 | `DESKPHONE_LANGUAGE` | `auto` | Whisper language (`en`, `nl`, …). Fixing it is faster and more accurate than `auto`. |
 | `DESKPHONE_WHISPER_MODEL` | `models/ggml-small.bin` | |
 | `DESKPHONE_WHISPER_BIN` | `whisper-cli` | |
