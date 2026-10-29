@@ -2,16 +2,16 @@
 // voice or keypad. The hook allows the tool with `answers` filled in, which is
 // what the on-screen dialog does.
 
+import { phrases } from './phrases.ts'
+
 export type Option = { label: string; description?: string }
 export type Question = { question: string; header?: string; options: Option[]; multiSelect?: boolean }
 export type Choice = { picked: number[] } | { text: string }
 
-export function speakQuestion(q: Question): string {
+export function speakQuestion(q: Question, lang = 'en'): string {
+  const say = phrases(lang)
   const options = q.options.map((o, i) => `${i + 1}: ${o.label}.`).join(' ')
-  const how = q.multiSelect
-    ? 'Say the numbers you want, or press them and then hash.'
-    : 'Say a number, or press it on the keypad.'
-  return `${q.question} ${options} ${how} Or just say your own answer.`
+  return `${q.question} ${options} ${q.multiSelect ? say.pickMany : say.pickOne} ${say.ownAnswer}`
 }
 
 const WORDS: Record<string, number> = {

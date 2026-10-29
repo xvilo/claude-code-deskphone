@@ -38,7 +38,7 @@ The ATA must send keypresses as RFC 2833 / RFC 4733 events, the HT801's default 
 
 When a phone-enabled session finishes a turn, the phone rings.
 
-- **Answer:** Claude reads its reply (markdown, code blocks and long paths are stripped, and very long replies are cut off with "the rest is on screen"). After the beep, speak your next prompt, or stay silent and it hangs up.
+- **Answer:** Claude reads its reply (markdown, code blocks and long paths are stripped, and very long replies are cut off with "the rest is on screen", or "de rest staat op het scherm" for a Dutch reply). After the beep, speak your next prompt, or stay silent and it hangs up.
 - **Don't answer:** the reply goes to voicemail.
 
 Callbacks wait until the line is free. If Claude answers while you're still on the call that asked the question, the phone rings right after you hang up.

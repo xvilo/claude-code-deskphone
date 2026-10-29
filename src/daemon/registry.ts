@@ -1,12 +1,12 @@
 export type PhoneEvent = { type: 'prompt'; text: string; ext: number }
-export type Voicemail = { text: string; at: number }
+export type Voicemail = { text: string; at: number; lang: string }
 
 export type Session = {
   pid: number
   ext: number
   cwd: string
   voicemail: Voicemail[]
-  lastReply: { text: string; at: number } | null
+  lastReply: Voicemail | null
   transcriptPath: string | null
   outbox: PhoneEvent[]
   listener: ((event: PhoneEvent) => void) | null
@@ -45,8 +45,8 @@ export class Registry {
     return [...this.byPid.values()].sort((a, b) => a.ext - b.ext)
   }
 
-  leaveVoicemail(session: Session, text: string, at = Date.now()): void {
-    session.voicemail.push({ text, at })
+  leaveVoicemail(session: Session, text: string, lang: string, at = Date.now()): void {
+    session.voicemail.push({ text, at, lang })
   }
 
   voicemailCount(): number {

@@ -55,4 +55,6 @@ The daemon speaks with the macOS **system voice** unless `DESKPHONE_VOICE` is se
 
 Each reply is spoken in its own language. The daemon detects it with macOS's language recognizer. When the reply isn't in `DESKPHONE_VOICE_LANGUAGE` (default `en`), the daemon picks an installed voice for that language. It prefers the home locale (`nl_NL` over `nl_BE`) and Premium or Enhanced voices, so downloading one, for example *Xander (Enhanced)*, is enough. To choose one yourself, set `DESKPHONE_VOICE_NL="Xander (Enhanced)"`. To use a Siri voice for your main language, make it the system voice and set `DESKPHONE_VOICE_LANGUAGE` to that language.
 
+The words the daemon adds around a reply follow the reply's language too: "(code on screen)", "a link to …", "the rest is on screen", the "Extension 101" and "Recap" or "Last time" prefixes, and the instructions after a question from Claude. They exist in English and Dutch; other languages get the English wording. Menu prompts such as the PIN and voicemail announcements stay in English.
+
 Next: [run Asterisk](asterisk).
