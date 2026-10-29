@@ -41,9 +41,9 @@ function onLine<T>(task: () => Promise<T>): Promise<T> {
   return next
 }
 
-async function say(call: Call, text: string): Promise<void> {
+async function say(call: Call, text: string, session?: Session): Promise<void> {
   if (call.closed || call.skipping) return
-  await call.play(await synthesize(text))
+  await call.play(await synthesize(text, session))
 }
 
 // The beep always plays, even right after a keypress cut the speech short.
@@ -126,7 +126,7 @@ async function handleInbound(call: Call, ext: number): Promise<void> {
   if (session.voicemail.length) {
     while (session.voicemail.length && !call.closed && !call.skipping) {
       const message = session.voicemail.shift()!
-      await say(call, message.text)
+      await say(call, message.text, session)
       if (call.closed) session.voicemail.unshift(message)
     }
     voicemailChanged()
@@ -143,7 +143,7 @@ async function handleInbound(call: Call, ext: number): Promise<void> {
 async function recapFor(session: Session): Promise<{ text: string; lang: string } | null> {
   const recap = session.transcriptPath ? await latestRecap(session.transcriptPath) : null
   if (recap && (!session.lastReply || recap.at > session.lastReply.at)) {
-    const lang = await detectLanguage(proseOf(recap.text))
+    const lang = await detectLanguage(proseOf(recap.text), session.language)
     return { text: `${phrases(lang).recap} ${toSpeech(recap.text, undefined, lang)}`, lang }
   }
   const last = session.lastReply
@@ -228,7 +228,7 @@ function ring(session: Session, text: string, lang: string): Promise<void> {
   return callPhone(
     session,
     async call => {
-      await say(call, text)
+      await say(call, text, session)
       const replied = await captureAndDeliver(call, session, REPLY_WAIT_MS)
       if (!replied) await say(call, 'Okay, bye.')
     },
@@ -245,7 +245,7 @@ function ring(session: Session, text: string, lang: string): Promise<void> {
 // Claude's multiple-choice questions, one after another. null if any goes
 // unanswered, so the dialog stays on screen.
 async function askQuestions(session: Session, questions: Question[], signal: AbortSignal): Promise<Record<string, string> | null> {
-  const lang = await detectLanguage(questions.map(q => q.question).join(' '))
+  const lang = await detectLanguage(questions.map(q => q.question).join(' '), session.language)
   const phrase = phrases(lang)
   return callPhone<Record<string, string> | null>(
     session,
@@ -377,7 +377,7 @@ const httpServer = createServer(async (req, res) => {
       const { pid, text, transcript } = await readJson(req)
       const session = registry.get(Number(pid))
       if (!session) return send(res, 404, { error: 'session not registered' })
-      const lang = await detectLanguage(proseOf(String(text ?? '')))
+      const lang = await detectLanguage(proseOf(String(text ?? '')), session.language)
       const speech = toSpeech(String(text ?? ''), undefined, lang)
       if (!speech) return send(res, 200, { skipped: true })
       session.lastReply = { text: speech, at: Date.now(), lang }

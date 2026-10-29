@@ -17,8 +17,8 @@ nav_order: 7
 | `DESKPHONE_ENDPOINT` | `PJSIP/phone` | What callbacks dial. |
 | `DESKPHONE_VOICE` | system voice | `say -v` voice name. |
 | `DESKPHONE_VOICE_LANGUAGE` | `en` | Language of `DESKPHONE_VOICE`. Replies detected in another language use an installed voice for that language instead. |
-| `DESKPHONE_VOICE_<LANG>` | best installed | Voice for one language, e.g. `DESKPHONE_VOICE_NL="Xander"`. |
-| `DESKPHONE_LANGUAGE` | `auto` | Whisper language (`en`, `nl`, …). Fixing it is faster and more accurate than `auto`. |
+| `DESKPHONE_VOICE_<LANG>` | best installed | Voice for one language, e.g. `DESKPHONE_VOICE_NL="Xander"`. Short replies that can't be recognized clearly also lean toward that language. |
+| `DESKPHONE_LANGUAGE` | `auto` | Whisper language (`en`, `nl`, …). Fixing it is faster and more accurate than `auto`. When set, short replies that can't be recognized clearly lean toward this language. |
 | `DESKPHONE_WHISPER_MODEL` | `models/ggml-small.bin` | |
 | `DESKPHONE_WHISPER_BIN` | `whisper-cli` | |
 | `DESKPHONE_RING_SECONDS` | `30` | How long a callback rings before going to voicemail. |
