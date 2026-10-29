@@ -63,6 +63,8 @@ The desk phone's `phone` account lives in `pjsip.conf`. To add another phone, su
 
 Phones can call each other. The desk phone is **1001**, and each added phone gets the next free number from **1002**. Dial the number (with `#` on the desk phone) and the other phone rings; the caller shows up as the account name and number. Numbers are published to Asterisk by the daemon, so phone-to-phone calls need the daemon running, like everything else.
 
+**iPhone and Android:** a SIP app that is in the background gets suspended, drops its registration within minutes and can't receive calls, even though it looks fine while open. Use an app with push notifications. Zoiper has a paid *Push Proxy* under **Settings → Incoming calls**; it needs notifications allowed in iOS and a registration expiry of at least ten minutes, which added phones are allowed (up to an hour). Set Zoiper's registration expiry to 3600 seconds.
+
 The daemon keeps these accounts in `~/.config/deskphone/phones.json` and adds them to Asterisk over ARI each time it connects. Asterisk holds them in memory only, so they don't need a redeploy and come back after an Asterisk restart. With a public and a local Asterisk, only the one the daemon is connected to has them.
 
 ## Ringer volume

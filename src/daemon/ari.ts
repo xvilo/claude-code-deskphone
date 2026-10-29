@@ -27,12 +27,14 @@ const DEVICE_ENDPOINT = {
   dtmf_mode: 'rfc4733',
   rtp_timeout: '30',
 }
+// Unlike the desk phone's AOR, long registrations are allowed: push proxies
+// such as Zoiper's refuse to work with expiry timers under ten minutes.
 const DEVICE_AOR = {
   max_contacts: '1',
   remove_existing: 'yes',
   qualify_frequency: '30',
   default_expiration: '120',
-  maximum_expiration: '120',
+  maximum_expiration: '3600',
   minimum_expiration: '60',
 }
 
