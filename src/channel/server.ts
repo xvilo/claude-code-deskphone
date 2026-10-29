@@ -7,6 +7,7 @@ import { findClaudePid } from '../shared/pid.ts'
 
 const pid = findClaudePid()
 let ext: number | null = null
+let phone: string | undefined
 let stream: AbortController | null = null
 
 const mcp = new Server(
@@ -44,7 +45,7 @@ async function forward(text: string, fromExt: number): Promise<void> {
 async function listen(controller: AbortController): Promise<void> {
   while (!controller.signal.aborted) {
     try {
-      if (ext !== null) ext = (await daemon('/register', { pid, cwd: process.cwd(), ext })).ext
+      if (ext !== null) ext = (await daemon('/register', { pid, cwd: process.cwd(), ext, phone })).ext
       const res = await fetch(`${DAEMON_URL}/events?pid=${pid}`, { signal: controller.signal })
       if (!res.ok || !res.body) throw new Error(`events: ${res.status}`)
       let buffer = ''
@@ -73,7 +74,10 @@ const tools = [
     description: 'Give this Claude Code session a phone extension. The user can dial it to send a spoken prompt, and the phone rings with the reply when a turn finishes.',
     inputSchema: {
       type: 'object',
-      properties: { ext: { type: 'number', description: 'Preferred extension between 101 and 199' } },
+      properties: {
+        ext: { type: 'number', description: 'Preferred extension between 101 and 199' },
+        phone: { type: 'string', description: 'SIP account to always call back, e.g. "phone" or "softphone". Empty string clears it. Omit to call whichever phone was used last.' },
+      },
     },
   },
   {
@@ -95,13 +99,16 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
   try {
     switch (req.params.name) {
       case 'phone_register': {
-        const preferred = (req.params.arguments as { ext?: number } | undefined)?.ext
-        ext = (await daemon('/register', { pid, cwd: process.cwd(), ext: preferred ?? ext ?? undefined })).ext
+        const args = req.params.arguments as { ext?: number; phone?: string } | undefined
+        if (args?.phone !== undefined) phone = args.phone
+        const registered = await daemon('/register', { pid, cwd: process.cwd(), ext: args?.ext ?? ext ?? undefined, phone })
+        ext = registered.ext
         if (!stream) {
           stream = new AbortController()
           void listen(stream)
         }
-        return text(`This session is on extension ${ext}. Pick up the phone and dial ${ext} to talk; it will ring when a turn finishes.`)
+        const target = registered.phone ? `${registered.phone} will ring` : 'the phone you used last will ring'
+        return text(`This session is on extension ${ext}. Dial ${ext} to talk; ${target} when a turn finishes.`)
       }
       case 'phone_unregister': {
         stream?.abort()

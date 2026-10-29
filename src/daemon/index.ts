@@ -14,6 +14,7 @@ import { proseOf, toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
 import { VoicemailStore } from './voicemail-store.ts'
+import { PhoneRouter, toEndpoint } from './phones.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
@@ -30,6 +31,7 @@ const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...arg
 
 type OutboundCall = { answered: (call: Call) => Promise<void>; missed: () => void }
 const outbound = new Map<string, OutboundCall>()
+const phones = new PhoneRouter()
 const calls = new Map<string, Call>()
 
 // Outbound calls are serialized so two finishing sessions never ring the
@@ -235,7 +237,7 @@ function callPhone<T>(
         },
       })
 
-      asterisk.originate(channelId, session.ext, callId, RING_SECONDS).catch(err => giveUp(`originate failed (${err.message})`))
+      asterisk.originate(phones.target(session.phone), channelId, session.ext, callId, RING_SECONDS).catch(err => giveUp(`originate failed (${err.message})`))
     })
   })
 }
@@ -323,10 +325,13 @@ function askPermission(session: Session, request: string, signal: AbortSignal): 
   )
 }
 
-async function runCall(channelId: string, direction: string, arg: string): Promise<void> {
+async function runCall(channelId: string, channelName: string, direction: string, arg: string): Promise<void> {
   let call: Call | undefined
   try {
-    if (direction === 'inbound') await asterisk.answer(channelId)
+    if (direction === 'inbound') {
+      phones.used(channelName)
+      await asterisk.answer(channelId)
+    }
     call = new Call(() => asterisk.teardown(channelId))
     calls.set(channelId, call)
     await asterisk.attachMedia(channelId, call.attach)
@@ -352,7 +357,7 @@ async function onEvent(event: AriEvent): Promise<void> {
   if (event.type === 'StasisStart') {
     // The media channels this daemon creates also enter the app, without args.
     const [direction, arg] = event.args ?? []
-    if (direction === 'inbound' || direction === 'outbound') await runCall(channel.id, direction, arg)
+    if (direction === 'inbound' || direction === 'outbound') await runCall(channel.id, channel.name, direction, arg)
   } else if (event.type === 'ChannelDtmfReceived') {
     if (event.digit) calls.get(channel.id)?.keypress(event.digit)
   } else if (event.type === 'StasisEnd' || event.type === 'ChannelDestroyed') {
@@ -378,11 +383,12 @@ const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
   try {
     if (req.method === 'POST' && url.pathname === '/register') {
-      const { pid, cwd, ext } = await readJson(req)
+      const { pid, cwd, ext, phone } = await readJson(req)
       pruneSessions()
       const session = registry.register(Number(pid), String(cwd ?? ''), ext ? Number(ext) : undefined)
-      log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})`)
-      return send(res, 200, { ext: session.ext })
+      if (phone !== undefined) session.phone = phone ? toEndpoint(String(phone)) : null
+      log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})${session.phone ? `, pinned to ${session.phone}` : ''}`)
+      return send(res, 200, { ext: session.ext, phone: session.phone })
     }
     if (req.method === 'POST' && url.pathname === '/unregister') {
       const { pid } = await readJson(req)
@@ -437,7 +443,7 @@ const httpServer = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/status') {
       return send(res, 200, {
         asterisk: asterisk.active,
-        sessions: registry.list().map(s => ({ pid: s.pid, ext: s.ext, cwd: s.cwd, voicemail: s.voicemail.length, connected: !!s.listener })),
+        sessions: registry.list().map(s => ({ pid: s.pid, ext: s.ext, cwd: s.cwd, phone: s.phone, voicemail: s.voicemail.length, connected: !!s.listener })),
       })
     }
     send(res, 404, { error: 'not found' })

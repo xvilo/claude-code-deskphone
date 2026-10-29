@@ -1,7 +1,6 @@
 const ARI_URLS = (process.env.DESKPHONE_ARI_URL ?? 'http://127.0.0.1:8088/ari').split(',').map(u => u.trim()).filter(Boolean)
 const ARI_USER = process.env.DESKPHONE_ARI_USER ?? 'deskphone'
 const ARI_PASSWORD = process.env.DESKPHONE_ARI_PASSWORD ?? 'deskphone'
-const ENDPOINT = process.env.DESKPHONE_ENDPOINT ?? 'PJSIP/phone'
 export const APP = 'deskphone'
 const RECONNECT_MS = 5000
 
@@ -113,9 +112,9 @@ export class Asterisk {
     await this.request('POST', '/channels', { endpoint: `Local/${count}@deskphone-mwi`, app: APP, timeout: '5' }).catch(() => {})
   }
 
-  async originate(channelId: string, ext: number, callId: string, ringSeconds: number): Promise<void> {
+  async originate(endpoint: string, channelId: string, ext: number, callId: string, ringSeconds: number): Promise<void> {
     await this.request('POST', '/channels', {
-      endpoint: ENDPOINT,
+      endpoint,
       app: APP,
       appArgs: `outbound,${callId}`,
       channelId,
