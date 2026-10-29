@@ -15,6 +15,7 @@ import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
 import { VoicemailStore } from './voicemail-store.ts'
 import { PhoneRouter, toEndpoint } from './phones.ts'
+import { DeviceStore, STATIC_DEVICES } from './devices.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
@@ -23,6 +24,7 @@ const OUTBOUND_PREFIX = 'deskphone-out-'
 
 const registry = new Registry()
 const voicemailStore = new VoicemailStore()
+const devices = new DeviceStore()
 const asterisk = new Asterisk(event => void onEvent(event))
 const beep = tone()
 const pins = new PinGuard()
@@ -131,6 +133,17 @@ function pruneSessions(): void {
   const dead = registry.prune(isAlive)
   for (const session of dead) log(`ext ${session.ext}: pid ${session.pid} exited, unregistered`)
   if (dead.length) voicemailChanged()
+}
+
+async function pushDevices(): Promise<void> {
+  for (const device of devices.list()) {
+    await asterisk.addDevice(device.name, device.password).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
+  }
+}
+
+function onAsteriskConnect(): void {
+  voicemailChanged()
+  void pushDevices()
 }
 
 async function handleInbound(call: Call, ext: number): Promise<void> {
@@ -390,6 +403,26 @@ const httpServer = createServer(async (req, res) => {
       log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})${session.phone ? `, pinned to ${session.phone}` : ''}`)
       return send(res, 200, { ext: session.ext, phone: session.phone })
     }
+    if (req.method === 'GET' && url.pathname === '/phones') {
+      const names = [...STATIC_DEVICES, ...devices.list().map(d => d.name)]
+      const phones = await Promise.all(names.map(async name => ({ name, state: await asterisk.deviceState(name), static: STATIC_DEVICES.includes(name) })))
+      return send(res, 200, { phones, server: asterisk.active ? new URL(asterisk.active).hostname : null })
+    }
+    if (req.method === 'POST' && url.pathname === '/phones') {
+      const device = await devices.add(String((await readJson(req)).name ?? ''))
+      await asterisk.addDevice(device.name, device.password).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
+      log(`added phone ${device.name}`)
+      return send(res, 200, { ...device, username: device.name, server: asterisk.active ? new URL(asterisk.active).hostname : null })
+    }
+    if (req.method === 'POST' && url.pathname === '/phones/remove') {
+      const name = String((await readJson(req)).name ?? '')
+      const removed = await devices.remove(name)
+      if (removed) {
+        await asterisk.removeDevice(name)
+        log(`removed phone ${name}`)
+      }
+      return send(res, 200, { removed })
+    }
     if (req.method === 'POST' && url.pathname === '/unregister') {
       const { pid } = await readJson(req)
       const removed = registry.unregister(Number(pid))
@@ -456,4 +489,5 @@ registry.restore(await voicemailStore.load())
 if (registry.voicemailCount()) log(`restored ${registry.voicemailCount()} voicemail message(s)`)
 setInterval(pruneSessions, 30_000).unref()
 httpServer.listen(HTTP_PORT, '127.0.0.1', () => log(`control API on http://127.0.0.1:${HTTP_PORT}`))
-void asterisk.connect(log, voicemailChanged)
+await devices.load()
+void asterisk.connect(log, onAsteriskConnect)

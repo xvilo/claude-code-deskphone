@@ -26,6 +26,7 @@ nav_order: 7
 | `DESKPHONE_REPLY_WAIT_MS` | `8000` | Silence after the beep on a callback before it hangs up. |
 | `DESKPHONE_VAD_THRESHOLD` | `500` | Speech level (RMS of 16-bit samples). Lower it if quiet speech isn't picked up. |
 | `DESKPHONE_MAX_SPEECH_CHARS` | `900` | Longer replies are cut, with "the rest is on screen". |
+| `DESKPHONE_PHONES_FILE` | `~/.config/deskphone/phones.json` | Phones added with `phone_device_add`, with their SIP passwords. |
 | `DESKPHONE_PIN_FILE` | `~/.config/deskphone/pin` | Where `npm run set-pin` stores the PIN hash. |
 | `DESKPHONE_VOICEMAIL_FILE` | `~/.config/deskphone/voicemail.json` | Where waiting voicemail is kept across daemon restarts. |
 | `DESKPHONE_PORT` | `7788` | Local control API, bound to `127.0.0.1`. |
@@ -37,7 +38,6 @@ The plugin's channel server and Stop hook find the daemon at `DESKPHONE_URL` (de
 | Variable | |
 | --- | --- |
 | `PHONE_PASSWORD` | SIP password of the `phone` account, which the ATA uses. |
-| `SOFTPHONE_PASSWORD` | Optional. SIP password of the `softphone` account. Unset, the account gets a random password. |
 | `ARI_PASSWORD` | Password of the `deskphone` ARI user, which the daemon uses. |
 
 `EXTERNAL_IP` (the address or hostname advertised to phones) and `SIP_PORT` are set in `docker-compose.yml` and `kubernetes/deployment.yaml`.

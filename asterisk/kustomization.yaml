@@ -17,6 +17,7 @@ configMapGenerator:
       - config/http.conf
       - config/pjsip.conf
       - config/rtp.conf
+      - config/sorcery.conf
       - render.sh
 secretGenerator:
   - name: asterisk-secrets
