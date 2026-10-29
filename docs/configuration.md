@@ -26,6 +26,7 @@ nav_order: 7
 | `DESKPHONE_VAD_THRESHOLD` | `500` | Speech level (RMS of 16-bit samples). Lower it if quiet speech isn't picked up. |
 | `DESKPHONE_MAX_SPEECH_CHARS` | `900` | Longer replies are cut, with "the rest is on screen". |
 | `DESKPHONE_PIN_FILE` | `~/.config/deskphone/pin` | Where `npm run set-pin` stores the PIN hash. |
+| `DESKPHONE_VOICEMAIL_FILE` | `~/.config/deskphone/voicemail.json` | Where waiting voicemail is kept across daemon restarts. |
 | `DESKPHONE_PORT` | `7788` | Local control API, bound to `127.0.0.1`. |
 
 The plugin's channel server and Stop hook find the daemon at `DESKPHONE_URL` (default `http://127.0.0.1:7788`).

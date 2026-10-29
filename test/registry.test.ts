@@ -40,3 +40,35 @@ test('keeps every voicemail and hands them out oldest first', () => {
   assert.deepEqual(order, ['a1', 'b1', 'a2'])
   assert.equal(registry.voicemailCount(), 0)
 })
+
+test('restored voicemail reattaches when its session registers again', () => {
+  const before = new Registry()
+  before.leaveVoicemail(before.register(1, '/a', 120), 'a1', 1)
+  before.leaveVoicemail(before.register(2, '/b'), 'b1', 2)
+  const after = new Registry()
+  after.restore(before.snapshot())
+  assert.equal(after.voicemailCount(), 2)
+  const a = after.register(1, '/a', 120)
+  assert.equal(a.ext, 120)
+  assert.deepEqual(a.voicemail, [{ text: 'a1', at: 1 }])
+  assert.equal(after.voicemailCount(), 2)
+  assert.equal(after.register(3, '/c').voicemail.length, 0)
+})
+
+test('voicemail from sessions that never return stays playable', () => {
+  const before = new Registry()
+  before.leaveVoicemail(before.register(1, '/a'), 'a1', 2)
+  const after = new Registry()
+  after.restore(before.snapshot())
+  const b = after.register(1, '/elsewhere')
+  after.leaveVoicemail(b, 'b1', 1)
+  const first = after.takeOldestVoicemail()!
+  assert.equal(first.message.text, 'b1')
+  assert.equal(after.isLive(first.session), true)
+  const second = after.takeOldestVoicemail()!
+  assert.equal(second.message.text, 'a1')
+  assert.equal(second.session.ext, 101)
+  assert.equal(after.isLive(second.session), false)
+  assert.equal(after.takeOldestVoicemail(), null)
+  assert.deepEqual(after.snapshot(), [])
+})

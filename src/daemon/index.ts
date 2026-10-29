@@ -12,6 +12,7 @@ import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
 import { toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
 import { synthesize, tone } from './tts.ts'
+import { VoicemailStore } from './voicemail-store.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
 const RING_SECONDS = Number(process.env.DESKPHONE_RING_SECONDS ?? 30)
@@ -19,6 +20,7 @@ const REPLY_WAIT_MS = Number(process.env.DESKPHONE_REPLY_WAIT_MS ?? 8000)
 const OUTBOUND_PREFIX = 'deskphone-out-'
 
 const registry = new Registry()
+const voicemailStore = new VoicemailStore()
 const asterisk = new Asterisk(event => void onEvent(event))
 const beep = tone()
 const pins = new PinGuard()
@@ -110,6 +112,7 @@ async function captureAndDeliver(call: Call, session: Session, noSpeechTimeoutMs
 
 function voicemailChanged(): void {
   void asterisk.setMessageWaiting(registry.voicemailCount())
+  voicemailStore.save(registry.snapshot()).catch(err => log('saving voicemail failed:', (err as Error).message))
 }
 
 async function handleInbound(call: Call, ext: number): Promise<void> {
@@ -155,7 +158,8 @@ async function playVoicemail(call: Call): Promise<void> {
       break
     }
     voicemailChanged()
-    await captureAndDeliver(call, session, REPLY_WAIT_MS)
+    // A session that never came back after a restart has nobody to answer.
+    if (registry.isLive(session)) await captureAndDeliver(call, session, REPLY_WAIT_MS)
   }
   voicemailChanged()
   await say(call, 'No more messages.')
@@ -358,7 +362,9 @@ const httpServer = createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/unregister') {
       const { pid } = await readJson(req)
-      return send(res, 200, { removed: registry.unregister(Number(pid)) })
+      const removed = registry.unregister(Number(pid))
+      if (removed) voicemailChanged()
+      return send(res, 200, { removed })
     }
     if (req.method === 'POST' && url.pathname === '/stop') {
       const { pid, text, transcript } = await readJson(req)
@@ -415,5 +421,7 @@ const httpServer = createServer(async (req, res) => {
   }
 })
 
+registry.restore(await voicemailStore.load())
+if (registry.voicemailCount()) log(`restored ${registry.voicemailCount()} voicemail message(s)`)
 httpServer.listen(HTTP_PORT, '127.0.0.1', () => log(`control API on http://127.0.0.1:${HTTP_PORT}`))
 void asterisk.connect(log, voicemailChanged)
