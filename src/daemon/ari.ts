@@ -143,10 +143,18 @@ export class Asterisk {
 
   // Asterisk keeps these in memory only (see sorcery.conf), so the daemon
   // pushes every device again each time it connects.
-  async addDevice(name: string, password: string): Promise<void> {
+  async addDevice(name: string, password: string, number: number): Promise<void> {
     await this.request('PUT', `${DYNAMIC_PJSIP}/auth/${name}`, undefined, fields({ auth_type: 'userpass', username: name, password }))
     await this.request('PUT', `${DYNAMIC_PJSIP}/aor/${name}`, undefined, fields(DEVICE_AOR))
-    await this.request('PUT', `${DYNAMIC_PJSIP}/endpoint/${name}`, undefined, fields({ ...DEVICE_ENDPOINT, auth: name, aors: name }))
+    await this.request('PUT', `${DYNAMIC_PJSIP}/endpoint/${name}`, undefined, fields({ ...DEVICE_ENDPOINT, auth: name, aors: name, callerid: `"${name}" <${number}>` }))
+    await this.setNumber(number, name)
+  }
+
+  // The from-phone dialplan dials PJSIP/${DESKPHONE_<number>} for 1XXX, so a
+  // phone's number is a global variable. Globals live in memory, like the
+  // dynamic PJSIP objects, and are pushed again on every connect.
+  async setNumber(number: number, name: string | null): Promise<void> {
+    await this.request('POST', '/asterisk/variable', { variable: `DESKPHONE_${number}`, value: name ?? '' })
   }
 
   async removeDevice(name: string): Promise<void> {

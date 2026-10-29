@@ -87,7 +87,7 @@ const tools = [
   },
   {
     name: 'phone_device_add',
-    description: 'Create a SIP account for another phone, such as a softphone on the laptop. Returns the username, password and server to enter in that phone.',
+    description: 'Create a SIP account for another phone, such as a softphone on the laptop. Returns the username, password and server to enter in that phone, and the number other phones dial to reach it.',
     inputSchema: {
       type: 'object',
       properties: { name: { type: 'string', description: 'Account name: lowercase letters, digits and underscores, e.g. "softphone" or "laptop"' } },
@@ -101,7 +101,7 @@ const tools = [
   },
   {
     name: 'phone_device_list',
-    description: 'List the phones (SIP accounts) and whether each is registered.',
+    description: 'List the phones (SIP accounts), their numbers and whether each is registered.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -140,8 +140,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         const { name } = req.params.arguments as { name: string }
         const device = await daemon('/phones', { name })
         return text(
-          `Created phone "${device.name}". SIP username: ${device.username}, password: ${device.password}, server: ${device.server ?? 'your Asterisk'} (same port as the desk phone). ` +
-            'Calls ring the phone used last; pin a session to it with phone_register phone="' + device.name + '".',
+          `Created phone "${device.name}", number ${device.number}. SIP username: ${device.username}, password: ${device.password}, server: ${device.server ?? 'your Asterisk'} (same port as the desk phone). ` +
+            'Other phones reach it by dialing its number. Callbacks ring the phone used last; pin a session to it with phone_register phone="' + device.name + '".',
         )
       }
       case 'phone_device_remove': {

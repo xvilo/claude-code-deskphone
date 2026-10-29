@@ -20,7 +20,7 @@ In the session, run `/deskphone:phone`, or ask Claude to "give this chat a phone
 
 ## Calling a session
 
-Lift the handset and dial the extension followed by `#`, for example `101#`.
+Lift the handset and dial the extension followed by `#`, for example `101#`. Numbers from `1001` ring [another phone](phone#more-phones) instead of a session.
 
 1. You hear "Claude, extension 101, tags-backend" (the session's folder), followed by a recap of where it is: Claude Code's own `※ recap` if there is a recent one, otherwise its last reply.
 2. After the beep, speak. A pause of 1.5 seconds ends your turn.
