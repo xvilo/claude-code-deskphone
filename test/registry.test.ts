@@ -31,9 +31,9 @@ test('keeps every voicemail and hands them out oldest first', () => {
   const registry = new Registry()
   const a = registry.register(1, '/a')
   const b = registry.register(2, '/b')
-  registry.leaveVoicemail(a, 'a1', 1)
-  registry.leaveVoicemail(b, 'b1', 2)
-  registry.leaveVoicemail(a, 'a2', 3)
+  registry.leaveVoicemail(a, 'a1', 'en', 1)
+  registry.leaveVoicemail(b, 'b1', 'en', 2)
+  registry.leaveVoicemail(a, 'a2', 'en', 3)
   assert.equal(registry.voicemailCount(), 3)
   const order = []
   for (let next; (next = registry.takeOldestVoicemail()); ) order.push(next.message.text)
@@ -43,25 +43,25 @@ test('keeps every voicemail and hands them out oldest first', () => {
 
 test('restored voicemail reattaches when its session registers again', () => {
   const before = new Registry()
-  before.leaveVoicemail(before.register(1, '/a', 120), 'a1', 1)
-  before.leaveVoicemail(before.register(2, '/b'), 'b1', 2)
+  before.leaveVoicemail(before.register(1, '/a', 120), 'a1', 'en', 1)
+  before.leaveVoicemail(before.register(2, '/b'), 'b1', 'en', 2)
   const after = new Registry()
   after.restore(before.snapshot())
   assert.equal(after.voicemailCount(), 2)
   const a = after.register(1, '/a', 120)
   assert.equal(a.ext, 120)
-  assert.deepEqual(a.voicemail, [{ text: 'a1', at: 1 }])
+  assert.deepEqual(a.voicemail, [{ text: 'a1', at: 1, lang: 'en' }])
   assert.equal(after.voicemailCount(), 2)
   assert.equal(after.register(3, '/c').voicemail.length, 0)
 })
 
 test('voicemail from sessions that never return stays playable', () => {
   const before = new Registry()
-  before.leaveVoicemail(before.register(1, '/a'), 'a1', 2)
+  before.leaveVoicemail(before.register(1, '/a'), 'a1', 'en', 2)
   const after = new Registry()
   after.restore(before.snapshot())
   const b = after.register(1, '/elsewhere')
-  after.leaveVoicemail(b, 'b1', 1)
+  after.leaveVoicemail(b, 'b1', 'en', 1)
   const first = after.takeOldestVoicemail()!
   assert.equal(first.message.text, 'b1')
   assert.equal(after.isLive(first.session), true)

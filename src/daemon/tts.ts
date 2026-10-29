@@ -13,7 +13,7 @@ export type Voice = { name: string; locale: string }
 
 const DETECT_LANGUAGE = 'ObjC.import("NaturalLanguage"); function run(argv) { return ObjC.unwrap($.NLLanguageRecognizer.dominantLanguageForString(argv[0])) }'
 
-async function detectLanguage(text: string): Promise<string> {
+export async function detectLanguage(text: string): Promise<string> {
   try {
     return String(await run('osascript', ['-l', 'JavaScript', '-e', DETECT_LANGUAGE, text])).trim().split('-')[0]
   } catch {
