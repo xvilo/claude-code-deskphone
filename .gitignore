@@ -4,3 +4,4 @@ models/
 *.aiff
 .env
 .claude/worktrees/
+.superpowers/
