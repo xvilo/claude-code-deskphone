@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { proseOf, toSpeech } from '../src/daemon/speech-text.ts'
-import { cleanTranscript } from '../src/daemon/stt.ts'
+import { cleanTranscript } from '../src/daemon/speech/whisper-cli.ts'
 
 test('strips markdown and code for speech', () => {
   const md = '## Done\n\nFixed **the bug** in `src/daemon/index.ts:42`.\n\n```ts\nconst x = 1\n```\n\n- See [docs](https://example.com/a/b)'

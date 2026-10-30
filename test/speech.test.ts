@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { chooseLanguage, parseVoices, pickVoice, preferredLanguages } from '../src/daemon/tts.ts'
+import { chooseLanguage, guessLanguage, preferredLanguages } from '../src/daemon/speech/language.ts'
+import { parseVoices, pickVoice } from '../src/daemon/speech/say.ts'
 
 const list = [
   'Albert              en_US    # Hello! My name is Albert.',
@@ -39,4 +40,11 @@ test('ranks the session hint, whisper and configured voices before the default v
   assert.deepEqual(preferredLanguages('fr', env), ['fr', 'nl', 'de', 'en'])
   assert.deepEqual(preferredLanguages(null, { DESKPHONE_LANGUAGE: 'auto' }), ['en'])
   assert.deepEqual(preferredLanguages('en', {}), ['en'])
+})
+
+test('guessLanguage uses the injected detector', async () => {
+  const guess = await guessLanguage('Gepusht.', 'nl', async () => ({ nl: 0.95 }))
+  assert.deepEqual(guess, { language: 'nl', confident: true })
+  const fallback = await guessLanguage('Ok.', 'nl', async () => ({ pl: 0.4, nl: 0.3 }))
+  assert.deepEqual(fallback, { language: 'nl', confident: false })
 })

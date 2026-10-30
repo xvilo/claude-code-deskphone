@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { FRAME_BYTES } from '../src/daemon/audio.ts'
+import { FRAME_BYTES, tone } from '../src/daemon/audio.ts'
 import { Endpointer } from '../src/daemon/vad.ts'
-import { tone } from '../src/daemon/tts.ts'
 
 const silence = Buffer.alloc(FRAME_BYTES)
 const speech = tone(300, 20, 4000)
