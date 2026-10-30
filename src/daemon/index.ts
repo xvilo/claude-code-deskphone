@@ -15,7 +15,8 @@ import { proseOf, toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
 import { VoicemailStore } from './voicemail-store.ts'
-import { PhoneRouter, toEndpoint } from './phones.ts'
+import { Lines } from './line.ts'
+import { PhoneRouter, phoneOfChannel, toEndpoint } from './phones.ts'
 import { DESK_PHONE, DeviceStore } from './devices.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
@@ -37,15 +38,7 @@ type OutboundCall = { answered: (call: Call) => Promise<void>; missed: () => voi
 const outbound = new Map<string, OutboundCall>()
 const phones = new PhoneRouter()
 const calls = new Map<string, Call>()
-
-// Outbound calls are serialized so two finishing sessions never ring the
-// single analog line at the same time.
-let line: Promise<unknown> = Promise.resolve()
-function onLine<T>(task: () => Promise<T>): Promise<T> {
-  const next = line.then(task, task)
-  line = next.catch(() => {})
-  return next
-}
+const lines = new Lines()
 
 async function say(call: Call, text: string, session?: Session): Promise<void> {
   if (call.closed || call.skipping) return
@@ -221,13 +214,6 @@ async function playVoicemail(call: Call): Promise<void> {
   await say(call, 'No more messages.')
 }
 
-// A reply can finish while the call that asked for it is still saying
-// "Got it", and ringing a busy line fails at once.
-async function lineFree(timeoutMs = 60000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (calls.size > 0 && Date.now() < deadline) await new Promise(r => setTimeout(r, 500))
-}
-
 // Rings the phone for a session. answered runs once it's picked up; missed
 // runs when it isn't (or the caller gives up via signal) and supplies the result.
 function callPhone<T>(
@@ -236,8 +222,11 @@ function callPhone<T>(
   missed: (reason: string) => T,
   signal?: AbortSignal,
 ): Promise<T> {
-  return onLine(async () => {
-    await lineFree()
+  const target = phones.target(session.phone)
+  return lines.serialize(target, async () => {
+    // A reply can finish while the call that asked for it is still saying
+    // "Got it", and ringing a busy phone fails at once.
+    await lines.whenFree(target)
     if (signal?.aborted) return missed('cancelled')
     return new Promise<T>(resolve => {
       const callId = randomBytes(6).toString('hex')
@@ -269,7 +258,7 @@ function callPhone<T>(
         },
       })
 
-      asterisk.originate(phones.target(session.phone), channelId, session.ext, callId, RING_SECONDS).catch(err => giveUp(`originate failed (${err.message})`))
+      asterisk.originate(target, channelId, session.ext, callId, RING_SECONDS).catch(err => giveUp(`originate failed (${err.message})`))
     })
   })
 }
@@ -359,6 +348,7 @@ function askPermission(session: Session, request: string, signal: AbortSignal): 
 
 async function runCall(channelId: string, channelName: string, direction: string, arg: string): Promise<void> {
   let call: Call | undefined
+  const release = lines.hold(phoneOfChannel(channelName) ?? channelName)
   try {
     if (direction === 'inbound') {
       phones.used(channelName)
@@ -378,8 +368,12 @@ async function runCall(channelId: string, channelName: string, direction: string
     if (call) await say(call, 'Something went wrong on the laptop.').catch(() => {})
   } finally {
     calls.delete(channelId)
-    if (call) await call.hangup()
-    else await asterisk.teardown(channelId)
+    try {
+      if (call) await call.hangup()
+      else await asterisk.teardown(channelId)
+    } finally {
+      release()
+    }
   }
 }
 
