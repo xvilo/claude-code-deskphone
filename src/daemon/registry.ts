@@ -1,4 +1,6 @@
-export type PhoneEvent = { type: 'prompt'; text: string; ext: number }
+import { RANGES, type Range } from './mode.ts'
+
+export type PhoneEvent ={ type: 'prompt'; text: string; ext: number }
 export type Voicemail = { text: string; at: number; lang: string }
 export type SavedVoicemail = { pid: number; ext: number; cwd: string; voicemail: Voicemail[] }
 
@@ -15,11 +17,13 @@ export type Session = {
   listener: ((event: PhoneEvent) => void) | null
 }
 
-export const VOICEMAIL_EXT = 100
-export const FIRST_EXT = 101
-export const LAST_EXT = 199
-
 export class Registry {
+  private readonly range: Range
+
+  constructor(range: Range = RANGES.sessions) {
+    this.range = range
+  }
+
   private byPid = new Map<number, Session>()
   // Restored from disk for sessions that haven't re-registered since the restart.
   private orphans: Session[] = []
@@ -117,8 +121,9 @@ export class Registry {
 
   private allocate(preferred?: number): number {
     const taken = new Set([...this.byPid.values()].map(s => s.ext))
-    if (preferred && preferred >= FIRST_EXT && preferred <= LAST_EXT && !taken.has(preferred)) return preferred
-    for (let ext = FIRST_EXT; ext <= LAST_EXT; ext++) if (!taken.has(ext)) return ext
+    const { first, last } = this.range
+    if (preferred && preferred >= first && preferred <= last && !taken.has(preferred)) return preferred
+    for (let ext = first; ext <= last; ext++) if (!taken.has(ext)) return ext
     throw new Error('all extensions are in use')
   }
 }

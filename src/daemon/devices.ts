@@ -2,15 +2,13 @@ import { randomBytes } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { RANGES } from './mode.ts'
 
 export type Device = { name: string; password: string; number: number }
 
 export const DEVICES_FILE = process.env.DESKPHONE_PHONES_FILE ?? join(homedir(), '.config', 'deskphone', 'phones.json')
 // The account in asterisk/config/pjsip.conf; Asterisk refuses to change it over ARI.
-export const DESK_PHONE = { name: 'phone', number: 1001 }
-// Phones call each other on these; sessions are 101-199 and voicemail 100.
-export const FIRST_NUMBER = 1002
-export const LAST_NUMBER = 1999
+export const DESK_PHONE = { name: 'phone', number: RANGES.phones.first }
 const NAME = /^[a-z][a-z0-9_]{0,31}$/
 
 export function checkName(name: string): string | null {
@@ -65,7 +63,7 @@ export class DeviceStore {
 
   private freeNumber(): number {
     const taken = new Set(this.devices.map(d => d.number))
-    for (let number = FIRST_NUMBER; number <= LAST_NUMBER; number++) if (!taken.has(number)) return number
+    for (let number = RANGES.phones.first + 1; number <= RANGES.phones.last; number++) if (!taken.has(number)) return number
     throw new Error('no phone numbers left')
   }
 

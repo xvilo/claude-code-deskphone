@@ -10,7 +10,8 @@ import { phrases } from './phrases.ts'
 import { PinGuard } from './pin.ts'
 import { answerText, parseKeyedChoice, parseSpokenChoice, speakQuestion, type Choice, type Question } from './questions.ts'
 import { latestRecap } from './recap.ts'
-import { Registry, VOICEMAIL_EXT, type Session } from './registry.ts'
+import { MENU_EXT } from './mode.ts'
+import { Registry, type Session } from './registry.ts'
 import { proseOf, toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
@@ -151,7 +152,7 @@ function onAsteriskConnect(): void {
 
 async function handleInbound(call: Call, ext: number): Promise<void> {
   pruneSessions()
-  if (ext === VOICEMAIL_EXT) return voicemailMenu(call)
+  if (ext === MENU_EXT) return voicemailMenu(call)
   const session = registry.byExt(ext)
   if (!session) {
     await say(call, `There is no Claude session on extension ${ext}.`)
