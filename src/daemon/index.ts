@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto'
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer } from 'node:http'
 import { basename } from 'node:path'
 import { Asterisk, type AriEvent } from './ari.ts'
 import { Call } from './call.ts'
 import { isScreenLocked } from './lock.ts'
 import { describeSessions } from './menu.ts'
 import { describePermission, parseDecision, type Decision } from './permission.ts'
+import { openSse, readJson, send, stripPrefix } from './http.ts'
 import { phrases } from './phrases.ts'
 import { PinGuard } from './pin.ts'
 import { answerText, parseKeyedChoice, parseSpokenChoice, speakQuestion, type Choice, type Question } from './questions.ts'
@@ -400,21 +401,11 @@ async function onEvent(event: AriEvent): Promise<void> {
   }
 }
 
-async function readJson(req: IncomingMessage): Promise<any> {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
-}
-
-function send(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' })
-  res.end(JSON.stringify(body))
-}
-
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
+  const path = stripPrefix(url.pathname)
   try {
-    if (req.method === 'POST' && url.pathname === '/register') {
+    if (req.method === 'POST' && path === '/register') {
       const { pid, cwd, ext, phone } = await readJson(req)
       pruneSessions()
       const session = registry.register(Number(pid), String(cwd ?? ''), ext ? Number(ext) : undefined)
@@ -422,18 +413,18 @@ const httpServer = createServer(async (req, res) => {
       log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})${session.phone ? `, pinned to ${session.phone}` : ''}`)
       return send(res, 200, { ext: session.ext, phone: session.phone })
     }
-    if (req.method === 'GET' && url.pathname === '/phones') {
+    if (req.method === 'GET' && path === '/phones') {
       const all = [DESK_PHONE, ...devices.list()]
       const phones = await Promise.all(all.map(async ({ name, number }) => ({ name, number, state: await asterisk.deviceState(name), static: name === DESK_PHONE.name })))
       return send(res, 200, { phones, server: asterisk.active ? new URL(asterisk.active).hostname : null })
     }
-    if (req.method === 'POST' && url.pathname === '/phones') {
+    if (req.method === 'POST' && path === '/phones') {
       const device = await devices.add(String((await readJson(req)).name ?? ''))
       await asterisk.addDevice(device.name, device.password, device.number).catch(err => log(`adding phone ${device.name} failed:`, (err as Error).message))
       log(`added phone ${device.name} as ${device.number}`)
       return send(res, 200, { ...device, username: device.name, server: asterisk.active ? new URL(asterisk.active).hostname : null })
     }
-    if (req.method === 'POST' && url.pathname === '/phones/remove') {
+    if (req.method === 'POST' && path === '/phones/remove') {
       const name = String((await readJson(req)).name ?? '')
       const number = devices.list().find(d => d.name === name)?.number
       const removed = await devices.remove(name)
@@ -444,13 +435,13 @@ const httpServer = createServer(async (req, res) => {
       }
       return send(res, 200, { removed })
     }
-    if (req.method === 'POST' && url.pathname === '/unregister') {
+    if (req.method === 'POST' && path === '/unregister') {
       const { pid } = await readJson(req)
       const removed = registry.unregister(Number(pid))
       if (removed) voicemailChanged()
       return send(res, 200, { removed })
     }
-    if (req.method === 'POST' && url.pathname === '/stop') {
+    if (req.method === 'POST' && path === '/stop') {
       const { pid, text, transcript } = await readJson(req)
       const session = registry.get(Number(pid))
       if (!session) return send(res, 404, { error: 'session not registered' })
@@ -463,7 +454,7 @@ const httpServer = createServer(async (req, res) => {
       void ring(session, speech, lang)
       return send(res, 202, { ringing: session.ext })
     }
-    if (req.method === 'POST' && url.pathname === '/permission') {
+    if (req.method === 'POST' && path === '/permission') {
       const { pid, tool_name, tool_input } = await readJson(req)
       const session = registry.get(Number(pid))
       if (!session) return send(res, 404, { error: 'session not registered' })
@@ -481,20 +472,15 @@ const httpServer = createServer(async (req, res) => {
       const decision = await askPermission(session, request, answeredElsewhere.signal)
       return send(res, 200, { decision })
     }
-    if (req.method === 'GET' && url.pathname === '/events') {
+    if (req.method === 'GET' && path === '/events') {
       const session = registry.get(Number(url.searchParams.get('pid')))
       if (!session) return send(res, 404, { error: 'session not registered' })
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
-      res.write(': connected\n\n')
-      const keepAlive = setInterval(() => res.write(': ping\n\n'), 15000)
-      const detach = registry.attach(session, event => res.write(`data: ${JSON.stringify(event)}\n\n`))
-      req.on('close', () => {
-        clearInterval(keepAlive)
-        detach()
-      })
+      let detach = () => {}
+      const sse = openSse(req, res, () => detach())
+      detach = registry.attach(session, event => sse.write(event))
       return
     }
-    if (req.method === 'GET' && url.pathname === '/status') {
+    if (req.method === 'GET' && path === '/status') {
       return send(res, 200, {
         asterisk: asterisk.active,
         sessions: registry.list().map(s => ({ pid: s.pid, ext: s.ext, cwd: s.cwd, phone: s.phone, voicemail: s.voicemail.length, connected: !!s.listener })),
