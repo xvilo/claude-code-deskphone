@@ -24,14 +24,19 @@ export function openSse(req: IncomingMessage, res: ServerResponse, onClose: () =
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
   res.write(': connected\n\n')
   const keepAlive = setInterval(() => res.write(': ping\n\n'), 15000)
+  const stop = () => clearInterval(keepAlive)
   req.on('close', () => {
-    clearInterval(keepAlive)
+    stop()
     onClose()
   })
-  const write = (event: unknown) => res.write(`data: ${JSON.stringify(event)}\n\n`)
+  res.on('close', stop)
+  const write = (event: unknown) => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`)
+  }
   return {
     write,
     end(final) {
+      stop()
       if (final !== undefined) write(final)
       res.end()
     },
