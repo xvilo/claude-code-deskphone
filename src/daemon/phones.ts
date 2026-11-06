@@ -5,6 +5,15 @@ export function toEndpoint(phone: string): string {
   return phone.includes('/') ? phone : `PJSIP/${phone}`
 }
 
+// A phone is named by its account or by the number other phones dial.
+export function resolvePhone(phone: string, known: { name: string; number: number }[]): string {
+  const value = phone.trim()
+  if (!/^\d+$/.test(value)) return toEndpoint(value)
+  const device = known.find(d => d.number === Number(value))
+  if (!device) throw new Error(`no phone has number ${value}; phone_device_list shows the numbers`)
+  return toEndpoint(device.name)
+}
+
 // Asterisk names channels <tech>/<endpoint>-<sequence>.
 export function phoneOfChannel(name: string): string | null {
   const dash = name.lastIndexOf('-')

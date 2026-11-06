@@ -76,7 +76,7 @@ const tools = [
       type: 'object',
       properties: {
         ext: { type: 'number', description: 'Preferred extension between 101 and 199' },
-        phone: { type: 'string', description: 'SIP account to always call back, e.g. "phone" or "softphone". Empty string clears it. Omit to call whichever phone was used last.' },
+        phone: { type: 'string', description: 'Phone to always call back: its SIP account name (e.g. "phone" or "softphone") or its number (e.g. "1001", the desk phone). Empty string clears it. Omit to call whichever phone was used last.' },
       },
     },
   },
@@ -119,9 +119,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     switch (req.params.name) {
       case 'phone_register': {
         const args = req.params.arguments as { ext?: number; phone?: string } | undefined
-        if (args?.phone !== undefined) phone = args.phone
-        const registered = await daemon('/register', { pid, cwd: process.cwd(), ext: args?.ext ?? ext ?? undefined, phone })
+        const registered = await daemon('/register', { pid, cwd: process.cwd(), ext: args?.ext ?? ext ?? undefined, phone: args?.phone ?? phone })
         ext = registered.ext
+        // Keep the resolved endpoint so re-registering doesn't depend on the number still existing.
+        if (args?.phone !== undefined) phone = registered.phone ?? ''
         if (!stream) {
           stream = new AbortController()
           void listen(stream)

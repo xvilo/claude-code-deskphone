@@ -15,7 +15,7 @@ import { proseOf, toSpeech } from './speech-text.ts'
 import { transcribe } from './stt.ts'
 import { detectLanguage, synthesize, tone } from './tts.ts'
 import { VoicemailStore } from './voicemail-store.ts'
-import { PhoneRouter, toEndpoint } from './phones.ts'
+import { PhoneRouter, resolvePhone } from './phones.ts'
 import { DESK_PHONE, DeviceStore } from './devices.ts'
 
 const HTTP_PORT = Number(process.env.DESKPHONE_PORT ?? 7788)
@@ -416,9 +416,10 @@ const httpServer = createServer(async (req, res) => {
   try {
     if (req.method === 'POST' && url.pathname === '/register') {
       const { pid, cwd, ext, phone } = await readJson(req)
+      const pinned = phone ? resolvePhone(String(phone), [DESK_PHONE, ...devices.list()]) : null
       pruneSessions()
       const session = registry.register(Number(pid), String(cwd ?? ''), ext ? Number(ext) : undefined)
-      if (phone !== undefined) session.phone = phone ? toEndpoint(String(phone)) : null
+      if (phone !== undefined) session.phone = pinned
       log(`registered pid ${session.pid} as ext ${session.ext} (${session.cwd})${session.phone ? `, pinned to ${session.phone}` : ''}`)
       return send(res, 200, { ext: session.ext, phone: session.phone })
     }
